@@ -9,21 +9,22 @@ export const dynamic = "force-dynamic";
 async function loadCategories() {
   try {
     const sql = getSql();
-    return (await sql`
+    const rows = (await sql`
       SELECT id, name, slug FROM "Category"
       WHERE "isActive" = true
       ORDER BY "sortOrder" ASC
     `) as { id: string; name: string; slug: string }[];
+    return { categories: rows, error: null as string | null };
   } catch (err) {
     // Если база временно недоступна — сайт всё равно открывается,
     // просто без списка категорий, а не белым экраном ошибки.
     console.error("Не вдалося завантажити категорії:", err);
-    return [];
+    return { categories: [], error: err instanceof Error ? err.message : String(err) };
   }
 }
 
 export default async function HomePage() {
-  const categories = await loadCategories();
+  const { categories, error } = await loadCategories();
   return (
     <main>
       {/* Hero: поиск — это то, чем реально будут пользоваться в первую очередь */}
@@ -55,7 +56,14 @@ export default async function HomePage() {
         </h2>
         <div className="category-grid">
           {categories.length === 0 && (
-            <p style={{ color: "var(--color-ink-muted)" }}>Категорії тимчасово недоступні.</p>
+            <p style={{ color: "var(--color-ink-muted)" }}>
+              Категорії тимчасово недоступні.
+              {error && (
+                <span style={{ display: "block", color: "var(--color-error)", fontSize: "var(--text-sm)" }}>
+                  (тимчасово для налагодження: {error})
+                </span>
+              )}
+            </p>
           )}
           {categories.map((cat) => (
             <Link key={cat.slug} href={`/catalog/${cat.slug}`} className="card category-card">
