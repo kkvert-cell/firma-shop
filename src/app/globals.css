@@ -1,0 +1,121 @@
+/* ============================================================================
+   Дизайн-система — интернет-магазин "Firma"
+   Визуальный язык: measurement / precision (шкала измерительного инструмента
+   как структурный приём — тонкие деления-разделители, не декор).
+   Шрифты: IBM Plex Sans (текст), IBM Plex Sans Condensed (заголовки),
+   IBM Plex Mono (только реальные данные: артикул, цена, характеристики).
+   ============================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Цвет */
+  --color-bg:        #F4F5F3;
+  --color-bg-raised: #FFFFFF;
+  --color-ink:        #181B1F;
+  --color-ink-muted:  #5A6570;
+  --color-border:     #DBDEE0;
+
+  --color-accent:        #2C5C8A; /* стальной синий — основной */
+  --color-accent-hover:  #234A70;
+  --color-mark:           #E8922E; /* калибровочная отметка — знижки, бейджи */
+
+  --color-success: #2F7A52;
+  --color-error:   #C0402E;
+
+  /* Типографика */
+  --font-body:      'IBM Plex Sans', system-ui, sans-serif;
+  --font-heading:   'IBM Plex Sans Condensed', system-ui, sans-serif;
+  --font-data:      'IBM Plex Mono', ui-monospace, monospace; /* SKU, цена, характеристики */
+
+  --text-xs:   0.75rem;
+  --text-sm:   0.875rem;
+  --text-base: 1rem;
+  --text-lg:   1.125rem;
+  --text-xl:   1.375rem;
+  --text-2xl:  1.75rem;
+  --text-3xl:  2.25rem;
+
+  /*層Layout */
+  --radius: 4px;
+  --border-hairline: 1px solid var(--color-border);
+  --max-line: 72ch;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --color-bg:        #14171A;
+    --color-bg-raised: #1C2024;
+    --color-ink:        #EDEFF0;
+    --color-ink-muted:  #9AA3AB;
+    --color-border:     #2C3136;
+    --color-accent:      #5B8FC7;
+    --color-accent-hover:#7BA6D6;
+  }
+}
+:root[data-theme="dark"] {
+  --color-bg:        #14171A;
+  --color-bg-raised: #1C2024;
+  --color-ink:        #EDEFF0;
+  --color-ink-muted:  #9AA3AB;
+  --color-border:     #2C3136;
+  --color-accent:      #5B8FC7;
+  --color-accent-hover:#7BA6D6;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.5;
+}
+
+h1, h2, h3, .heading {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.data, .sku, .price {
+  font-family: var(--font-data);
+}
+
+/* Разделитель-"деление" — вместо декоративных теней/градиентов между секциями */
+.tick-divider {
+  height: 1px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--color-border) 0 1px,
+    transparent 1px 12px
+  );
+}
+
+.card {
+  background: var(--color-bg-raised);
+  border: var(--border-hairline);
+  border-radius: var(--radius);
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  color: #fff;
+  border-radius: var(--radius);
+}
+.btn-primary:hover { background: var(--color-accent-hover); }
+
+.badge-mark {
+  background: var(--color-mark);
+  color: #181B1F;
+  border-radius: var(--radius);
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+}
