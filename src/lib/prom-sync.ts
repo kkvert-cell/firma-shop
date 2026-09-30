@@ -92,6 +92,7 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
       description: it.description,
       categoryPath: it.categoryPath.join(" > "),
       brandSlug: it.brand ? slugify(it.brand) : null,
+      vendorCode: it.vendorCode,
       price: it.price,
       currency: it.currency,
       available: it.available,
@@ -99,15 +100,16 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
     });
   }
   await sql(
-    `INSERT INTO "Product"("sku","externalId","slug","name","description","categoryId","brandId","price","currency","isAvailable","sourceUrl","syncedAt","updatedAt")
-     SELECT 'prom-' || x."externalId", x."externalId", x.slug, x.name, x.description,
+    `INSERT INTO "Product"("sku","externalId","vendorCode","slug","name","description","categoryId","brandId","price","currency","isAvailable","sourceUrl","syncedAt","updatedAt")
+     SELECT 'prom-' || x."externalId", x."externalId", x."vendorCode", x.slug, x.name, x.description,
             (SELECT c.id FROM "Category" c WHERE c.path = x."categoryPath"),
             (SELECT b.id FROM "Brand" b WHERE b.slug = x."brandSlug"),
             COALESCE(x.price, 0), x.currency, x.available, x."sourceUrl", $2::timestamp, now()
-     FROM jsonb_to_recordset($1::jsonb) AS x("externalId" text, slug text, name text, description text,
+     FROM jsonb_to_recordset($1::jsonb) AS x("externalId" text, "vendorCode" text, slug text, name text, description text,
           "categoryPath" text, "brandSlug" text, price numeric, currency text, available boolean, "sourceUrl" text)
      ON CONFLICT ("externalId") DO UPDATE SET
        slug = EXCLUDED.slug, name = EXCLUDED.name, description = EXCLUDED.description,
+       "vendorCode" = EXCLUDED."vendorCode",
        "categoryId" = EXCLUDED."categoryId", "brandId" = EXCLUDED."brandId", price = EXCLUDED.price,
        currency = EXCLUDED.currency, "isAvailable" = EXCLUDED."isAvailable", "sourceUrl" = EXCLUDED."sourceUrl",
        "syncedAt" = EXCLUDED."syncedAt", "updatedAt" = now()`,

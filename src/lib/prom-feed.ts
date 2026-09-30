@@ -14,6 +14,7 @@ export type FeedItem = {
   currency: string;
   categoryPath: string[]; // ["Інструменти", "Електроінструмент", "Дрилі, шуруповерти"]
   brand: string | null;
+  vendorCode: string | null; // артикул (g:mpn) — по нему сверяемся с KeyCRM
   details: { name: string; value: string }[]; // характеристики товара
 };
 
@@ -96,6 +97,7 @@ export function parseItem(raw: string): FeedItem | null {
 
   const brandRaw = firstTag(raw, "brand");
   const brand = brandRaw && brandRaw.toLowerCase() !== "без бренду" ? brandRaw : null;
+  const vendorCode = firstTag(raw, "mpn");
 
   const details: { name: string; value: string }[] = [];
   const detailRe =
@@ -119,6 +121,7 @@ export function parseItem(raw: string): FeedItem | null {
     currency: priceMatch?.[2] ?? "UAH",
     categoryPath: categoryPath.length ? categoryPath : ["Інше"],
     brand,
+    vendorCode,
     details,
   };
 }

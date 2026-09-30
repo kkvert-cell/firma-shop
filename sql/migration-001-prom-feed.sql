@@ -2,6 +2,7 @@
 -- Выполнить ОДИН раз в Neon SQL Editor (после schema.sql и seed.sql).
 
 ALTER TABLE "Product"  ADD COLUMN IF NOT EXISTS "externalId" TEXT UNIQUE;   -- id товара на Проме
+ALTER TABLE "Product"  ADD COLUMN IF NOT EXISTS "vendorCode" TEXT UNIQUE;   -- артикул — для звірки з KeyCRM
 ALTER TABLE "Product"  ADD COLUMN IF NOT EXISTS "sourceUrl"  TEXT;          -- ссылка на товар на Проме
 ALTER TABLE "Product"  ADD COLUMN IF NOT EXISTS "syncedAt"   TIMESTAMP;     -- когда товар последний раз был в фиде
 ALTER TABLE "Category" ADD COLUMN IF NOT EXISTS "path" TEXT UNIQUE; -- полный путь категории из фида
