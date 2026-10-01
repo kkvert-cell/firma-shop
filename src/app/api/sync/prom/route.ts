@@ -24,7 +24,16 @@ export async function GET(req: NextRequest) {
   const p = req.nextUrl.searchParams;
   const secret = process.env.SYNC_SECRET;
   const key = p.get("key") ?? "";
-  if (!secret || key !== secret) return page("<h3>Доступ заборонено</h3>", 403);
+  if (!secret) {
+    return page("<h3>SYNC_SECRET не заданий на сервері</h3><p>Перевірте Cloudflare → Variables and secrets → Production.</p>", 500);
+  }
+  if (key !== secret) {
+    return page(
+      `<h3>Доступ заборонено</h3>
+       <p style="color:#888;font-size:13px">(діагностика: довжина збереженого секрету — ${secret.length}, довжина введеного — ${key.length})</p>`,
+      403
+    );
+  }
 
   const feedUrl = process.env.PROM_FEED_URL;
   if (!feedUrl) return page("<h3>Не задано PROM_FEED_URL</h3><p>Додайте секрет у Cloudflare (Variables and secrets).</p>", 500);
