@@ -52,12 +52,6 @@ function firstTag(item: string, tag: string): string | null {
   return m ? decode(m[1]) : null;
 }
 
-// title/description/link в этом фиде идут БЕЗ префикса g: (обычные RSS-теги),
-// в отличие от id/price/availability/image_link и т.п.
-function plainTag(item: string, tag: string): string | null {
-  const m = item.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`));
-  return m ? decode(m[1]) : null;
-}
 
 function allTags(item: string, tag: string): string[] {
   const out: string[] = [];
@@ -75,10 +69,10 @@ export function splitItems(xml: string): string[] {
 
 export function parseItem(raw: string): FeedItem | null {
   const externalId = firstTag(raw, "id");
-  const name = plainTag(raw, "title");
+  const name = firstTag(raw, "title");
   if (!externalId || !name) return null;
 
-  const link = plainTag(raw, "link") ?? "";
+  const link = firstTag(raw, "link") ?? "";
   const linkMatch = link.match(/\/p(\d+)-([^./?]+)\.html/);
   const slug = linkMatch ? `p${linkMatch[1]}-${linkMatch[2]}` : `p${externalId}`;
 
@@ -113,7 +107,7 @@ export function parseItem(raw: string): FeedItem | null {
     externalId,
     slug,
     name,
-    description: plainTag(raw, "description") ?? "",
+    description: firstTag(raw, "description") ?? "",
     sourceUrl: link.replace(/\?.*$/, ""),
     images: uniqueImages,
     available: (firstTag(raw, "availability") ?? "").toLowerCase() === "in stock",
