@@ -11,7 +11,7 @@ async function loadCategories() {
     const sql = getSql();
     const rows = (await sql`
       SELECT id, name, slug FROM "Category"
-      WHERE "isActive" = true
+      WHERE "isActive" = true AND "parentId" IS NULL
       ORDER BY "sortOrder" ASC
     `) as { id: string; name: string; slug: string }[];
     return { categories: rows, error: null as string | null };
