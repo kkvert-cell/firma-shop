@@ -1,103 +1,132 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import type { Metadata } from "next";
+import Breadcrumbs from "@/components/Breadcrumbs";
+import ProductCard from "@/components/ProductCard";
+import ProductGallery from "@/components/ProductGallery";
+import { SITE_URL, SHOP_PHONE, SHOP_PHONE_TEXT, formatPrice } from "@/lib/site";
+import { jsonLd, productJsonLd, productMetadata, breadcrumbJsonLd } from "@/lib/seo";
+import { loadProduct } from "@/lib/catalog";
 
-// В реальном проекте товар придёт из БД по slug'у, характеристики (attributes)
-// выводятся динамически из ProductAttributeValue (EAV) — здесь для наглядности
-// они прописаны как массив.
+export const dynamic = "force-dynamic";
 
-const product = {
-  name: "Штангенциркуль цифровий 150 мм",
-  sku: "SVR-150",
-  brand: "ANENG",
-  price: 349,
-  oldPrice: 429,
-  available: true,
-  description:
-    "Цифровий штангенциркуль з РК-дисплеєм для точних вимірювань зовнішніх, внутрішніх розмірів і глибини.",
-  attributes: [
-    { name: "Діапазон вимірювання", value: "0–150 мм" },
-    { name: "Точність", value: "±0.02 мм" },
-    { name: "Матеріал", value: "Нержавіюча сталь" },
-    { name: "Живлення", value: "Батарейка CR2032" },
-  ],
-};
+type Props = { params: Promise<{ slug: string }> };
 
-export default function ProductPage() {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  try {
+    const data = await loadProduct(slug);
+    if (!data) return { title: "Товар не знайдено", robots: { index: false } };
+    return productMetadata({ ...data.product, image: data.images[0]?.url ?? null });
+  } catch {
+    return { title: "Товар" };
+  }
+}
+
+export default async function ProductPage({ params }: Props) {
+  const { slug } = await params;
+
+  let data;
+  try {
+    data = await loadProduct(slug);
+  } catch (err) {
+    console.error("Не вдалося завантажити товар:", err);
+    return (
+      <main>
+        <p className="empty-state">Сторінка тимчасово недоступна. Спробуйте оновити її за хвилину.</p>
+      </main>
+    );
+  }
+  if (!data) notFound();
+
+  const { product: p, images, attrs, related, crumbs } = data;
+  const imageUrls = images.map((i) => i.url);
+  const discount = p.oldPrice && p.oldPrice > p.price && p.price > 0 ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
+
+  const ld = [
+    productJsonLd({ ...p, images: imageUrls }),
+    breadcrumbJsonLd([
+      { name: "Головна", url: SITE_URL },
+      ...crumbs.map((c) => ({ name: c.name, url: `${SITE_URL}/catalog/${c.slug}` })),
+      { name: p.name, url: `${SITE_URL}/product/${p.slug}` },
+    ]),
+  ];
+
   return (
     <main>
-      <nav aria-label="breadcrumbs" style={{ fontSize: "var(--text-sm)", color: "var(--color-ink-muted)" }}>
-        <Link href="/">Головна</Link> /{" "}
-        <Link href="/catalog/izmeritelnyj-instrument">Контрольно-вимірювальний інструмент</Link> /{" "}
-        {product.name}
-      </nav>
+      {ld.map((item, i) => (
+        <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(item) }} />
+      ))}
+      <Breadcrumbs items={[...crumbs.map((c) => ({ name: c.name, href: `/catalog/${c.slug}` })), { name: p.name }]} />
 
-      <div className="product-detail-layout" style={{ marginTop: "var(--space-6)" }}>
-        {/* Галерея — заглушка, реально будет карусель с zoom */}
-        <div className="product-gallery">
-          <div className="product-image-placeholder" style={{ aspectRatio: "1 / 1" }} />
-        </div>
+      <div className="pdp">
+        <ProductGallery images={imageUrls} name={p.name} />
 
         <div>
-          <div className="data" style={{ fontSize: "var(--text-sm)", color: "var(--color-ink-muted)" }}>
-            Арт. {product.sku} · {product.brand}
+          <h1 className="heading page-title">{p.name}</h1>
+          <div className="data muted pdp-meta">
+            {p.vendorCode && <span>Арт. {p.vendorCode}</span>}
+            {p.brand && <span>{p.brand}</span>}
           </div>
-          <h1 className="heading" style={{ fontSize: "var(--text-2xl)", margin: "var(--space-2) 0" }}>
-            {product.name}
-          </h1>
 
-          <div style={{ margin: "var(--space-4) 0" }}>
-            <span className="price data" style={{ fontSize: "var(--text-xl)" }}>{product.price} ₴</span>
-            {product.oldPrice && (
-              <span
-                className="data"
-                style={{ textDecoration: "line-through", color: "var(--color-ink-muted)", marginLeft: 8 }}
-              >
-                {product.oldPrice} ₴
-              </span>
+          <div className="pdp-price">
+            {p.price > 0 ? (
+              <>
+                <span className="price data pdp-price-main">{formatPrice(p.price)} ₴</span>
+                {discount > 0 && p.oldPrice && (
+                  <>
+                    <span className="old-price data">{formatPrice(p.oldPrice)} ₴</span>
+                    <span className="badge-mark pdp-discount">−{discount}%</span>
+                  </>
+                )}
+              </>
+            ) : (
+              <span className="stock-out">Ціну уточнюйте</span>
             )}
           </div>
 
-          <p style={{ color: product.available ? "var(--color-success)" : "var(--color-error)" }}>
-            {product.available ? "В наявності" : "Немає в наявності"}
-          </p>
+          <p className={p.isAvailable ? "stock-in" : "stock-out"}>{p.isAvailable ? "В наявності" : "Немає в наявності"}</p>
 
-          <div style={{ display: "flex", gap: "var(--space-2)", margin: "var(--space-4) 0" }}>
-            <button className="btn-primary" style={{ padding: "10px 20px" }}>Додати в кошик</button>
-            <button className="card" style={{ padding: "10px 20px" }}>Купити в 1 клік</button>
+          <div className="card buy-box">
+            <strong>Замовити</strong>
+            <p className="muted">Оформлення замовлення на сайті з&apos;явиться найближчим часом. Поки що зателефонуйте — оформимо замовлення за кілька хвилин.</p>
+            <a href={`tel:${SHOP_PHONE}`} className="btn-primary call-btn">{SHOP_PHONE_TEXT}</a>
           </div>
 
-          <div style={{ display: "flex", gap: "var(--space-4)", fontSize: "var(--text-sm)" }}>
-            <button>☆ В обране</button>
-            <button>⇄ Порівняти</button>
-          </div>
-
-          {/* B2B-блок: то самое требование про запрос счёта для юрлиц */}
-          <div className="card" style={{ padding: "var(--space-4)", marginTop: "var(--space-6)" }}>
-            <strong>Купуєте для компанії?</strong>
-            <p style={{ fontSize: "var(--text-sm)", color: "var(--color-ink-muted)" }}>
-              Замовте рахунок або комерційну пропозицію на реквізити компанії.
-            </p>
-            <button className="btn-primary" style={{ marginTop: "var(--space-2)", padding: "8px 16px" }}>
-              Запросити рахунок
-            </button>
-          </div>
-
-          <div className="tick-divider" style={{ margin: "var(--space-6) 0" }} />
-
-          <h2 className="heading" style={{ fontSize: "var(--text-lg)" }}>Характеристики</h2>
-          <table style={{ width: "100%", fontSize: "var(--text-sm)" }}>
-            <tbody>
-              {product.attributes.map((attr) => (
-                <tr key={attr.name} style={{ borderBottom: "var(--border-hairline)" }}>
-                  <td style={{ padding: "6px 0", color: "var(--color-ink-muted)" }}>{attr.name}</td>
-                  <td className="data" style={{ padding: "6px 0" }}>{attr.value}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <p style={{ marginTop: "var(--space-6)" }}>{product.description}</p>
+          {attrs.length > 0 && (
+            <>
+              <h2 className="heading section-title">Характеристики</h2>
+              <table className="specs">
+                <tbody>
+                  {attrs.map((a, i) => (
+                    <tr key={i}>
+                      <td className="muted">{a.name}</td>
+                      <td className="data">{a.value}{a.unit ? ` ${a.unit}` : ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
         </div>
       </div>
+
+      {p.description && (
+        <section className="pdp-description">
+          <h2 className="heading section-title">Опис</h2>
+          <p>{p.description}</p>
+        </section>
+      )}
+
+      {related.length > 0 && (
+        <section>
+          <div className="tick-divider" style={{ margin: "var(--space-8) 0 var(--space-4)" }} />
+          <h2 className="heading section-title">Схожі товари</h2>
+          <div className="product-grid">
+            {related.map((r) => <ProductCard key={r.id} p={r} />)}
+          </div>
+        </section>
+      )}
     </main>
   );
 }

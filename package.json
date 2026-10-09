@@ -12,16 +12,16 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "0.10.4",
-    "next": "16.3.6",
+    "next": "16.4.0",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },
   "devDependencies": {
-    "@opennextjs/cloudflare": "^1.20.6",
+    "@opennextjs/cloudflare": "1.20.9",
     "@types/node": "22.10.2",
     "@types/react": "19.0.2",
     "@types/react-dom": "19.0.2",
     "typescript": "5.7.2",
-    "wrangler": "^4.140.0"
+    "wrangler": "4.148.0"
   }
 }

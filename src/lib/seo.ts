@@ -1,76 +1,66 @@
-// ============================================================================
-// SEO для страницы товара: метатеги + JSON-LD (Product/Offer schema).
-// generateMetadata — специальная функция Next.js, которая формирует
-// <title>, <meta description>, OpenGraph и canonical URL автоматически
-// на основе данных товара из БД.
-// ============================================================================
-
+// SEO: метатеги и структурированные данные (JSON-LD) для поисковиков.
 import type { Metadata } from "next";
+import { SITE_NAME, SITE_URL } from "./site";
 
-type ProductSeoData = {
+export function jsonLd(data: unknown): string {
+  // "<" экранируем, чтобы данные не могли закрыть тег <script>
+  return JSON.stringify(data).replace(/</g, "\\u003c");
+}
+
+export function productMetadata(p: {
   name: string;
   slug: string;
-  description: string;
-  price: number;
-  currency: string;
-  available: boolean;
-  brand: string;
-  images: string[];
-  seoTitle?: string | null;
-};
-
-export function generateProductMetadata(product: ProductSeoData): Metadata {
-  const title = product.seoTitle ?? `${product.name} — купити в Firma`;
+  description: string | null;
+  seoTitle: string | null;
+  seoDescription: string | null;
+  image: string | null;
+}): Metadata {
+  const title = p.seoTitle ?? `${p.name} — купити в ${SITE_NAME}`;
   const description =
-    product.description.slice(0, 155) || `${product.name}. Доставка по Україні, гарантія, оплата на вибір.`;
-
+    p.seoDescription ?? ((p.description ?? "").replace(/\s+/g, " ").trim().slice(0, 155) || `${p.name}. Доставка по Україні.`);
+  const url = `${SITE_URL}/product/${p.slug}`;
   return {
     title,
     description,
-    alternates: { canonical: `https://firma-shop.ua/product/${product.slug}` },
-    openGraph: {
-      title,
-      description,
-      images: product.images,
-      type: "website",
-    },
+    alternates: { canonical: url },
+    openGraph: { title, description, url, type: "website", images: p.image ? [p.image] : undefined },
     twitter: { card: "summary_large_image", title, description },
   };
 }
 
-// JSON-LD — структурированные данные для Google (показывают цену/наличие
-// прямо в выдаче поиска). Рендерится как <script type="application/ld+json">
-// внутри страницы товара.
-export function productJsonLd(product: ProductSeoData) {
+export function productJsonLd(p: {
+  name: string;
+  slug: string;
+  description: string | null;
+  price: number;
+  currency: string;
+  isAvailable: boolean;
+  vendorCode: string | null;
+  brand: string | null;
+  images: string[];
+}) {
   return {
     "@context": "https://schema.org",
     "@type": "Product",
-    name: product.name,
-    description: product.description,
-    brand: { "@type": "Brand", name: product.brand },
-    image: product.images,
+    name: p.name,
+    description: (p.description ?? "").replace(/\s+/g, " ").trim().slice(0, 500) || undefined,
+    image: p.images.length ? p.images : undefined,
+    mpn: p.vendorCode ?? undefined,
+    brand: p.brand ? { "@type": "Brand", name: p.brand } : undefined,
     offers: {
       "@type": "Offer",
-      priceCurrency: product.currency,
-      price: product.price,
-      availability: product.available
-        ? "https://schema.org/InStock"
-        : "https://schema.org/OutOfStock",
-      url: `https://firma-shop.ua/product/${product.slug}`,
+      url: `${SITE_URL}/product/${p.slug}`,
+      priceCurrency: p.currency,
+      price: p.price,
+      availability: p.isAvailable ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
     },
   };
 }
 
-// BreadcrumbList — аналогично, для хлебных крошек в выдаче поиска
 export function breadcrumbJsonLd(items: { name: string; url: string }[]) {
   return {
     "@context": "https://schema.org",
     "@type": "BreadcrumbList",
-    itemListElement: items.map((item, i) => ({
-      "@type": "ListItem",
-      position: i + 1,
-      name: item.name,
-      item: item.url,
-    })),
+    itemListElement: items.map((it, i) => ({ "@type": "ListItem", position: i + 1, name: it.name, item: it.url })),
   };
 }
