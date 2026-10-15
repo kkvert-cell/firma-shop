@@ -4,7 +4,7 @@
 // KeyCRM использует для остатков сущность "offers" (варианты товара) —
 // каждый offer имеет свой sku и свой остаток, у товара может быть несколько offers.
 
-const BASE = "https://openapi.keycrm.app/v1";
+const DEFAULT_BASE = "https://openapi.keycrm.app/v1";
 
 export type KeycrmResponse = { status: number; ok: boolean; body: unknown };
 
@@ -17,7 +17,7 @@ export async function keycrmGet(
     throw new Error("KEYCRM_API_KEY не задана — додайте секрет у Cloudflare (Variables and secrets)");
   }
 
-  const url = new URL(BASE + path);
+  const url = new URL((process.env.KEYCRM_BASE_URL ?? DEFAULT_BASE) + path);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
 
   const res = await fetch(url, {

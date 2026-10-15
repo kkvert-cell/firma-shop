@@ -85,7 +85,13 @@ export default async function ProductPage({ params }: Props) {
             )}
           </div>
 
-          <p className={p.isAvailable ? "stock-in" : "stock-out"}>{p.isAvailable ? "В наявності" : "Немає в наявності"}</p>
+          <p className={p.isAvailable ? "stock-in" : "stock-out"}>
+            {!p.isAvailable
+              ? "Немає в наявності"
+              : p.stockExact && p.stockQty > 0 && p.stockQty <= 5
+                ? `Залишилось ${p.stockQty} шт.`
+                : "В наявності"}
+          </p>
 
           <div className="card buy-box">
             <strong>Замовити</strong>

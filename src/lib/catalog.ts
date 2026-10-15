@@ -301,6 +301,8 @@ export type ProductFull = {
   oldPrice: number | null;
   currency: string;
   isAvailable: boolean;
+  stockQty: number;
+  stockExact: boolean; // true — остаток точный (пришёл из KeyCRM)
   vendorCode: string | null;
   sku: string;
   sourceUrl: string | null;
@@ -314,7 +316,8 @@ export type ProductFull = {
 export async function getProductBySlug(run: Run, slug: string) {
   const rows = await run(
     `SELECT p.id, p.name, p.slug, p.description, p.price::float8 AS price, p."oldPrice"::float8 AS "oldPrice",
-            p.currency, p."isAvailable", p."vendorCode", p.sku, p."sourceUrl", p."seoTitle", p."seoDescription",
+            p.currency, p."isAvailable", p."stockQty", (p."stockSyncedAt" IS NOT NULL) AS "stockExact",
+            p."vendorCode", p.sku, p."sourceUrl", p."seoTitle", p."seoDescription",
             p."categoryId", c.path AS "categoryPath", b.name AS brand
      FROM "Product" p
      JOIN "Category" c ON c.id = p."categoryId"

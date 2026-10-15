@@ -109,9 +109,11 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
           "categoryPath" text, "brandSlug" text, price numeric, currency text, available boolean, "sourceUrl" text)
      ON CONFLICT ("externalId") DO UPDATE SET
        slug = EXCLUDED.slug, name = EXCLUDED.name, description = EXCLUDED.description,
-       "vendorCode" = EXCLUDED."vendorCode",
+       "vendorCode" = COALESCE("Product"."vendorCode", EXCLUDED."vendorCode"),
        "categoryId" = EXCLUDED."categoryId", "brandId" = EXCLUDED."brandId", price = EXCLUDED.price,
-       currency = EXCLUDED.currency, "isAvailable" = EXCLUDED."isAvailable", "sourceUrl" = EXCLUDED."sourceUrl",
+       currency = EXCLUDED.currency,
+       "isAvailable" = CASE WHEN "Product"."stockSyncedAt" IS NOT NULL THEN "Product"."isAvailable" ELSE EXCLUDED."isAvailable" END,
+       "sourceUrl" = EXCLUDED."sourceUrl",
        "syncedAt" = EXCLUDED."syncedAt", "updatedAt" = now()`,
     [j([...products.values()]), runTs]
   );
