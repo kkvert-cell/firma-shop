@@ -1,71 +1,78 @@
+"use client";
+
 import Link from "next/link";
-
-// Корзина в реальном проекте — client component (нужны onClick для +/- количества
-// без перезагрузки страницы), данные хранятся в Cart/CartItem из schema.prisma
-// и привязаны либо к userId, либо к sessionId (гость).
-
-const mockCartItems = [
-  { id: "1", sku: "SVR-150", name: "Штангенциркуль цифровий 150 мм", price: 349, qty: 1 },
-  { id: "2", sku: "MMD-830L", name: "Мультиметр цифровий ANENG", price: 599, qty: 2 },
-];
+import SmartImage from "@/components/SmartImage";
+import { thumb } from "@/lib/image";
+import { useCart } from "@/lib/useCart";
+import { formatPrice } from "@/lib/site";
 
 export default function CartPage() {
-  const total = mockCartItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+  const { mounted, loading, view, notices, setQty, remove, total, blocked } = useCart();
+
+  if (!mounted) {
+    return (
+      <main>
+        <h1 className="heading page-title">Кошик</h1>
+      </main>
+    );
+  }
+
+  if (view.length === 0) {
+    return (
+      <main>
+        <h1 className="heading page-title">Кошик</h1>
+        <p className="empty-state">
+          Кошик порожній. <Link href="/catalog">Перейти до каталогу</Link>
+        </p>
+      </main>
+    );
+  }
 
   return (
     <main>
-      <h1 className="heading" style={{ fontSize: "var(--text-2xl)" }}>Кошик</h1>
+      <h1 className="heading page-title">Кошик</h1>
+      {notices.map((n, i) => (
+        <p key={i} className="notice">{n}</p>
+      ))}
 
-      <div className="tick-divider" style={{ margin: "var(--space-4) 0" }} />
-
-      {mockCartItems.length === 0 ? (
-        <p>Кошик порожній. <Link href="/catalog">Перейти до каталогу</Link></p>
-      ) : (
-        <div className="cart-layout">
-          <div style={{ flex: 1 }}>
-            {mockCartItems.map((item) => (
-              <div key={item.id} className="card" style={{ padding: "var(--space-4)", marginBottom: "var(--space-3)", display: "flex", gap: "var(--space-4)", alignItems: "center" }}>
-                <div className="product-image-placeholder" style={{ width: 64, height: 64, flexShrink: 0 }} />
-
-                <div style={{ flex: 1 }}>
-                  <div className="data" style={{ fontSize: "var(--text-xs)", color: "var(--color-ink-muted)" }}>
-                    Арт. {item.sku}
-                  </div>
-                  <div>{item.name}</div>
-                </div>
-
-                {/* Изменение количества прямо в корзине, как требует ТЗ */}
-                <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-                  <button aria-label="Зменшити кількість">−</button>
-                  <span className="data">{item.qty}</span>
-                  <button aria-label="Збільшити кількість">+</button>
-                </div>
-
-                <div className="price data" style={{ minWidth: 90, textAlign: "right" }}>
-                  {item.price * item.qty} ₴
-                </div>
-
-                <button aria-label="Видалити" style={{ color: "var(--color-error)" }}>✕</button>
+      <div className="cart-page">
+        <div>
+          {view.map((l) => (
+            <div key={l.id} className="card cart-line">
+              <div className="cart-line-img">
+                {l.image ? <SmartImage src={thumb(l.image, 160)} fallback={l.image} alt={l.name} /> : <span className="no-photo">Немає фото</span>}
               </div>
-            ))}
-
-            <button style={{ fontSize: "var(--text-sm)", color: "var(--color-ink-muted)" }}>
-              Очистити кошик
-            </button>
-          </div>
-
-          {/* Итоговая сводка — отдельным блоком, чтобы всегда была видна сумма */}
-          <aside className="card cart-summary" style={{ padding: "var(--space-4)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "var(--space-4)" }}>
-              <strong>Разом</strong>
-              <span className="price data" style={{ fontSize: "var(--text-lg)" }}>{total} ₴</span>
+              <div className="cart-line-main">
+                <Link href={`/product/${l.slug}`} className="cart-line-name">{l.name}</Link>
+                {!l.available && <div className="stock-out">Не можна замовити: {l.reason}. Приберіть товар з кошика.</div>}
+                <div className="data muted">{formatPrice(l.price)} ₴ / шт.</div>
+              </div>
+              <div className="qty" aria-label="Кількість">
+                <button type="button" onClick={() => setQty(l.id, l.qty - 1)} disabled={l.qty <= 1} aria-label="Менше">−</button>
+                <span className="data">{l.qty}</span>
+                <button type="button" onClick={() => setQty(l.id, l.qty + 1)} disabled={l.qty >= l.max} aria-label="Більше">+</button>
+              </div>
+              <div className="price data cart-line-total">{formatPrice(l.price * l.qty)} ₴</div>
+              <button type="button" className="cart-remove" onClick={() => remove(l.id)} aria-label={`Прибрати «${l.name}»`}>✕</button>
             </div>
-            <Link href="/checkout" className="btn-primary" style={{ display: "block", textAlign: "center", padding: "12px", borderRadius: "var(--radius)" }}>
-              Оформити замовлення
-            </Link>
-          </aside>
+          ))}
         </div>
-      )}
+
+        <aside className="card cart-summary">
+          <div className="cart-sum-row">
+            <span>Разом</span>
+            <span className="price data">{formatPrice(total)} ₴</span>
+          </div>
+          <p className="muted small">Вартість доставки сплачується за тарифами перевізника.</p>
+          {blocked || loading ? (
+            <button type="button" className="btn-primary wide" disabled>
+              {loading ? "Перевіряємо наявність…" : "Приберіть недоступні товари"}
+            </button>
+          ) : (
+            <Link href="/checkout" className="btn-primary wide">Оформити замовлення</Link>
+          )}
+        </aside>
+      </div>
     </main>
   );
 }

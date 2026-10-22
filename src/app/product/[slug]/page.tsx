@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import ProductCard from "@/components/ProductCard";
 import ProductGallery from "@/components/ProductGallery";
+import AddToCart from "@/components/AddToCart";
 import { SITE_URL, SHOP_PHONE, SHOP_PHONE_TEXT, formatPrice } from "@/lib/site";
 import { jsonLd, productJsonLd, productMetadata, breadcrumbJsonLd } from "@/lib/seo";
 import { loadProduct } from "@/lib/catalog";
@@ -94,9 +95,19 @@ export default async function ProductPage({ params }: Props) {
           </p>
 
           <div className="card buy-box">
-            <strong>Замовити</strong>
-            <p className="muted">Оформлення замовлення на сайті з&apos;явиться найближчим часом. Поки що зателефонуйте — оформимо замовлення за кілька хвилин.</p>
-            <a href={`tel:${SHOP_PHONE}`} className="btn-primary call-btn">{SHOP_PHONE_TEXT}</a>
+            <AddToCart
+              product={{
+                id: p.id,
+                slug: p.slug,
+                name: p.name,
+                price: p.price,
+                image: imageUrls[0] ?? null,
+                available: p.isAvailable,
+                maxQty: p.stockExact && p.stockQty > 0 ? p.stockQty : 99,
+              }}
+            />
+            <p className="muted">Доставка Новою поштою або Укрпоштою по всій Україні. Оплата при отриманні або за реквізитами.</p>
+            <p className="muted">Потрібна консультація? <a href={`tel:${SHOP_PHONE}`} className="data">{SHOP_PHONE_TEXT}</a></p>
           </div>
 
           {attrs.length > 0 && (

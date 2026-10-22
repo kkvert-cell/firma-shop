@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SHOP_PHONE, SHOP_PHONE_TEXT } from "@/lib/site";
+import CartLink from "./CartLink";
 
 export default function SiteHeader() {
   return (
@@ -11,7 +12,7 @@ export default function SiteHeader() {
           <button type="submit" className="btn-primary">Знайти</button>
         </form>
         <a href={`tel:${SHOP_PHONE}`} className="header-link header-phone">{SHOP_PHONE_TEXT}</a>
-        <Link href="/cart" className="header-link">Кошик</Link>
+        <CartLink />
       </div>
     </header>
   );
