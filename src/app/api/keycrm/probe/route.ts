@@ -41,6 +41,20 @@ export async function GET(req: NextRequest) {
   ];
 
   const out: Record<string, unknown> = {};
+
+  // Службові довідники без особистих даних — показуємо як є (щоб перевірити номери служб доставки і джерело «Сайт»)
+  for (const [name, path] of [
+    ["sources_plain", "/order/source"],
+    ["delivery_services_plain", "/order/delivery-service"],
+  ] as const) {
+    try {
+      const r = await keycrmGet(path, { limit: 50 });
+      const data = ((r.body as { data?: unknown })?.data ?? []) as Record<string, unknown>[];
+      out[name] = { status: r.status, items: Array.isArray(data) ? data.map((d) => ({ id: d.id, name: d.name, alias: d.alias, driver: d.driver })) : r.body };
+    } catch (e) {
+      out[name] = { error: e instanceof Error ? e.message : String(e) };
+    }
+  }
   for (const [name, path, params] of targets) {
     try {
       const r = await keycrmGet(path, params);

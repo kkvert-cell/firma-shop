@@ -8,9 +8,11 @@ const DEFAULT_BASE = "https://openapi.keycrm.app/v1";
 
 export type KeycrmResponse = { status: number; ok: boolean; body: unknown };
 
-export async function keycrmGet(
+async function keycrmCall(
+  method: "GET" | "POST",
   path: string,
-  params: Record<string, string | number> = {}
+  params: Record<string, string | number> = {},
+  payload?: unknown
 ): Promise<KeycrmResponse> {
   const key = process.env.KEYCRM_API_KEY;
   if (!key) {
@@ -20,9 +22,16 @@ export async function keycrmGet(
   const url = new URL((process.env.KEYCRM_BASE_URL ?? DEFAULT_BASE) + path);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v));
 
+  const headers: Record<string, string> = { Authorization: `Bearer ${key}`, Accept: "application/json" };
+  if (method === "POST") headers["Content-Type"] = "application/json";
+
   const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${key}`, Accept: "application/json" },
+    method,
+    headers,
+    body: method === "POST" ? JSON.stringify(payload) : undefined,
     cache: "no-store",
+    // не ждём KeyCRM дольше 10 секунд, чтобы не зависать
+    signal: AbortSignal.timeout(10_000),
   });
 
   const text = await res.text();
@@ -34,3 +43,8 @@ export async function keycrmGet(
   }
   return { status: res.status, ok: res.ok, body };
 }
+
+export const keycrmGet = (path: string, params: Record<string, string | number> = {}) =>
+  keycrmCall("GET", path, params);
+
+export const keycrmPost = (path: string, payload: unknown) => keycrmCall("POST", path, {}, payload);

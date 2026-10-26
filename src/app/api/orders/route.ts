@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { getRunner } from "@/lib/catalog";
 import { createOrder, validateOrder } from "@/lib/orders";
+import { sendOrderToKeycrm } from "@/lib/keycrm-orders";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,17 @@ export async function POST(req: NextRequest) {
   try {
     const r = await createOrder(getRunner(), v.value);
     if (!r.ok) return NextResponse.json({ error: r.error, problems: r.problems }, { status: r.status });
+    // Покупатель уже получил ответ; передачу в KeyCRM делаем «за кадром». Если не выйдет — cron повторит.
+    if (process.env.KEYCRM_API_KEY) {
+      const number = r.orderNumber;
+      after(async () => {
+        try {
+          await sendOrderToKeycrm(getRunner(), number);
+        } catch (e) {
+          console.error("keycrm order:", e);
+        }
+      });
+    }
     return NextResponse.json({ orderNumber: r.orderNumber, token: r.token });
   } catch (err) {
     console.error("orders:", err);

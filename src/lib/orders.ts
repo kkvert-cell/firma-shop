@@ -12,6 +12,8 @@ export type OrderInput = {
   carrier: "NOVA_POSHTA" | "UKRPOSHTA";
   city: string;
   point: string;
+  cityRef: string | null; // код города Новой почты (если выбран из списка)
+  pointRef: string | null; // код отделения Новой почты
   payment: "CASH_ON_DELIVERY" | "BANK_TRANSFER";
   comment: string | null;
   items: { id: string; qty: number }[];
@@ -57,6 +59,10 @@ export function validateOrder(body: unknown): { ok: true; value: OrderInput } | 
   if (city.length < 2) fields.city = "Вкажіть населений пункт";
   if (point.length < 2) fields.point = carrier === "UKRPOSHTA" ? "Вкажіть відділення або адресу" : "Вкажіть відділення, поштомат або адресу";
 
+  const refOk = (v: unknown) => (typeof v === "string" && /^[0-9a-fA-F-]{36}$/.test(v.trim()) ? v.trim() : null);
+  const cityRef = carrier === "NOVA_POSHTA" ? refOk(b.cityRef) : null;
+  const pointRef = carrier === "NOVA_POSHTA" && cityRef ? refOk(b.pointRef) : null;
+
   const payment = b.payment === "BANK_TRANSFER" ? "BANK_TRANSFER" : b.payment === "CASH_ON_DELIVERY" ? "CASH_ON_DELIVERY" : null;
   if (!payment) fields.payment = "Оберіть спосіб оплати";
 
@@ -83,6 +89,8 @@ export function validateOrder(body: unknown): { ok: true; value: OrderInput } | 
       carrier: carrier!,
       city,
       point,
+      cityRef,
+      pointRef,
       payment: payment!,
       comment: str(b.comment, 1000) || null,
       items: [...merged.entries()].map(([id, qty]) => ({ id, qty })),
@@ -158,7 +166,19 @@ export async function createOrder(run: Run, input: OrderInput): Promise<OrderRes
         JSON.stringify(lines), input.carrier, input.city, input.point, input.payment,
       ]
     );
-    return { ok: true, orderNumber: String(res[0].orderNumber), token: input.token };
+    const orderNumber = String(res[0].orderNumber);
+    if (input.cityRef && input.pointRef) {
+      // Коди НП пишемо окремо: якщо міграцію 006 ще не виконано, замовлення від цього не постраждає
+      try {
+        await run(
+          `UPDATE "Shipment" SET "cityRef" = $2, "warehouseRef" = $3 WHERE "orderId" = (SELECT id FROM "Order" WHERE "orderNumber" = $1)`,
+          [orderNumber, input.cityRef, input.pointRef]
+        );
+      } catch (e) {
+        console.error("shipment refs:", e);
+      }
+    }
+    return { ok: true, orderNumber, token: input.token };
   } catch (err) {
     // Гонка: та сама форма відправлена двічі одночасно — друга впирається в унікальний токен
     const again = await run(`SELECT "orderNumber" FROM "Order" WHERE "clientToken" = $1`, [input.token]);

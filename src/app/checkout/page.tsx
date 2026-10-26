@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useCart } from "@/lib/useCart";
 import { formatPrice } from "@/lib/site";
+import NovaPoshtaPicker from "@/components/NovaPoshtaPicker";
 
 type Fields = Record<string, string>;
 type Problem = { id: string; name: string; reason: string };
@@ -14,7 +15,7 @@ export default function CheckoutPage() {
   const { mounted, loading, view, notices, total, blocked, clear } = useCart();
   const [form, setForm] = useState({
     firstName: "", lastName: "", phone: "", email: "",
-    carrier: "NOVA_POSHTA", city: "", point: "", payment: "CASH_ON_DELIVERY", comment: "", website: "",
+    carrier: "NOVA_POSHTA", city: "", cityRef: "", point: "", pointRef: "", payment: "CASH_ON_DELIVERY", comment: "", website: "",
   });
   const [errors, setErrors] = useState<Fields>({});
   const [serverError, setServerError] = useState<string | null>(null);
@@ -104,11 +105,28 @@ export default function CheckoutPage() {
 
           <fieldset>
             <legend>Доставка</legend>
-            <label className="check"><input type="radio" name="carrier" checked={form.carrier === "NOVA_POSHTA"} onChange={() => setForm((f) => ({ ...f, carrier: "NOVA_POSHTA" }))} /> Нова пошта (відділення, поштомат або адреса)</label>
-            <label className="check"><input type="radio" name="carrier" checked={form.carrier === "UKRPOSHTA"} onChange={() => setForm((f) => ({ ...f, carrier: "UKRPOSHTA" }))} /> Укрпошта</label>
+            <label className="check"><input type="radio" name="carrier" checked={form.carrier === "NOVA_POSHTA"} onChange={() => setForm((f) => ({ ...f, carrier: "NOVA_POSHTA", city: "", cityRef: "", point: "", pointRef: "" }))} /> Нова пошта (відділення, поштомат або адреса)</label>
+            <label className="check"><input type="radio" name="carrier" checked={form.carrier === "UKRPOSHTA"} onChange={() => setForm((f) => ({ ...f, carrier: "UKRPOSHTA", city: "", cityRef: "", point: "", pointRef: "" }))} /> Укрпошта</label>
             {err("carrier")}
-            <label>Населений пункт<input value={form.city} onChange={set("city")} autoComplete="address-level2" required />{err("city")}</label>
-            <label>Відділення, поштомат або адреса<input value={form.point} onChange={set("point")} placeholder="Наприклад: відділення №5" required />{err("point")}</label>
+            {form.carrier === "NOVA_POSHTA" ? (
+              <NovaPoshtaPicker
+                value={{ city: form.city, cityRef: form.cityRef, point: form.point, pointRef: form.pointRef }}
+                onChange={(patch) => {
+                  setForm((f) => ({ ...f, ...patch }));
+                  setErrors((prev) => {
+                    const rest = { ...prev };
+                    for (const k of Object.keys(patch)) delete rest[k === "cityRef" ? "city" : k === "pointRef" ? "point" : k];
+                    return rest;
+                  });
+                }}
+                errors={errors}
+              />
+            ) : (
+              <>
+                <label>Населений пункт<input value={form.city} onChange={set("city")} autoComplete="address-level2" required />{err("city")}</label>
+                <label>Відділення або адреса<input value={form.point} onChange={set("point")} placeholder="Наприклад: відділення №5" required />{err("point")}</label>
+              </>
+            )}
             <p className="muted small">Вартість доставки сплачується за тарифами перевізника при отриманні.</p>
           </fieldset>
 

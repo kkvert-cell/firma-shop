@@ -476,3 +476,12 @@ a.btn-primary:hover { text-decoration: none; }
 .summary-list .data, .cart-sum-row .data { white-space: nowrap; }
 
 .cart-line-total { white-space: nowrap; }
+
+/* Вибір міста й відділення Нової пошти */
+.np-list { list-style: none; margin: var(--space-1) 0 0; padding: 0; max-height: 240px; overflow-y: auto; border: var(--border-hairline); border-radius: var(--radius); background: var(--color-bg-raised); }
+.np-list li + li { border-top: var(--border-hairline); }
+.np-list button { display: block; width: 100%; text-align: left; padding: var(--space-2) var(--space-3); background: none; border: 0; font: inherit; font-size: var(--text-sm); color: var(--color-ink); cursor: pointer; }
+.np-list button:hover, .np-list button:focus-visible { background: rgba(0, 0, 0, 0.05); }
+.np-hint { padding: var(--space-2) var(--space-3); font-size: var(--text-sm); color: var(--color-ink-muted); }
+.np-chosen { display: flex; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-1); padding: var(--space-2) var(--space-3); border: var(--border-hairline); border-radius: var(--radius); color: var(--color-ink); }
+.link-btn { background: none; border: 0; padding: 0; font: inherit; font-size: var(--text-sm); color: inherit; text-decoration: underline; cursor: pointer; }
