@@ -163,6 +163,9 @@ export default function CheckoutPage() {
           <button type="submit" className="btn-primary wide" disabled={busy || blocked || loading}>
             {busy ? "Відправляємо…" : blocked ? "У кошику є недоступні товари" : "Підтвердити замовлення"}
           </button>
+          <p className="muted small">
+            Підтверджуючи замовлення, ви погоджуєтесь з <Link href="/info/oferta">публічною офертою</Link> та <Link href="/info/privacy">політикою конфіденційності</Link>.
+          </p>
         </form>
 
         <aside className="card cart-summary">
