@@ -2,6 +2,9 @@ import { after, NextRequest, NextResponse } from "next/server";
 import { getRunner } from "@/lib/catalog";
 import { createOrder, validateOrder } from "@/lib/orders";
 import { sendOrderToKeycrm } from "@/lib/keycrm-orders";
+import { notifyOwner } from "@/lib/notify";
+import { activeProvider } from "@/lib/payments";
+import { formatPrice } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -24,17 +27,26 @@ export async function POST(req: NextRequest) {
   const v = validateOrder(body);
   if (!v.ok) return NextResponse.json({ error: "Перевірте виділені поля", fields: v.fields }, { status: 422 });
 
+  if (v.value.payment === "ONLINE_CARD" && !activeProvider()) {
+    return NextResponse.json({ error: "Перевірте виділені поля", fields: { payment: "Онлайн-оплата поки недоступна. Оберіть інший спосіб." } }, { status: 422 });
+  }
+
   try {
     const r = await createOrder(getRunner(), v.value);
     if (!r.ok) return NextResponse.json({ error: r.error, problems: r.problems }, { status: r.status });
-    // Покупатель уже получил ответ; передачу в KeyCRM делаем «за кадром». Если не выйдет — cron повторит.
-    if (process.env.KEYCRM_API_KEY) {
+    // Покупатель уже получил ответ; остальное делаем «за кадром». Если KeyCRM не ответит — cron повторит.
+    // Заказы с онлайн-оплатой уходят в KeyCRM и к владелице только после успешной оплаты.
+    if (r.created) {
       const number = r.orderNumber;
+      const v2 = v.value;
       after(async () => {
         try {
-          await sendOrderToKeycrm(getRunner(), number);
+          if (v2.payment !== "ONLINE_CARD") {
+            await notifyOwner(`🛒 Нове замовлення ${number} на ${formatPrice(r.total ?? 0)} ₴: ${v2.lastName} ${v2.firstName}, ${v2.phone}.`);
+            if (process.env.KEYCRM_API_KEY) await sendOrderToKeycrm(getRunner(), number);
+          }
         } catch (e) {
-          console.error("keycrm order:", e);
+          console.error("order after:", e);
         }
       });
     }

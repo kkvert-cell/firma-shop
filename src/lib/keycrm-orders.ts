@@ -34,6 +34,8 @@ type OrderRow = {
   warehouse: string | null;
   method: string | null;
   warehouseRef: string | null;
+  payStatus: string | null;
+  total: number;
 };
 type ItemRow = { name: string | null; vendorCode: string | null; quantity: number; price: number };
 
@@ -45,6 +47,9 @@ const PAY_NOTE: Record<string, string> = {
 };
 
 export function buildKeycrmOrder(o: OrderRow, items: ItemRow[], sourceId: number) {
+  const paidOnline = o.method === "ONLINE_CARD" && o.payStatus === "PAID";
+  // id способу оплати в KeyCRM (необов'язково). Якщо задати секрет KEYCRM_PAYMENT_METHOD_ID, оплата піде в KeyCRM як «сплачено»
+  const payMethodId = Number(process.env.KEYCRM_PAYMENT_METHOD_ID);
   const carrierName = CARRIER_NAME[o.carrier ?? ""] ?? "Інше";
   const delivery =
     o.carrier === "NOVA_POSHTA"
@@ -57,7 +62,7 @@ export function buildKeycrmOrder(o: OrderRow, items: ItemRow[], sourceId: number
   return {
     source_id: sourceId,
     source_uuid: o.orderNumber, // наш номер: за ним же шукаємо дублі
-    manager_comment: `Замовлення з сайту ${o.orderNumber}. Оплата: ${PAY_NOTE[o.method ?? ""] ?? "уточнити"}.`,
+    manager_comment: `Замовлення з сайту ${o.orderNumber}. Оплата: ${paidOnline ? "картка онлайн — СПЛАЧЕНО, гроші вже отримано" : PAY_NOTE[o.method ?? ""] ?? "уточнити"}.`,
     buyer_comment: o.comment ?? undefined,
     buyer: { full_name: fullName, phone: o.phone, ...(o.email ? { email: o.email } : {}) },
     shipping: {
@@ -69,6 +74,9 @@ export function buildKeycrmOrder(o: OrderRow, items: ItemRow[], sourceId: number
       recipient_full_name: fullName,
       recipient_phone: o.phone,
     },
+    ...(paidOnline && Number.isFinite(payMethodId) && payMethodId > 0
+      ? { payments: [{ payment_method_id: payMethodId, amount: o.total, status: "paid", description: `Онлайн-оплата ${o.orderNumber}` }] }
+      : {}),
     products: items.map((i) => ({
       ...(i.vendorCode ? { sku: i.vendorCode } : {}),
       name: i.name ?? "Товар",
@@ -111,13 +119,14 @@ async function findExisting(sourceId: number, orderNumber: string): Promise<stri
   return first && String(first.source_uuid ?? "") === orderNumber && first.id != null ? String(first.id) : null;
 }
 
-export type SendResult = { ok: true; keycrmId: string; already?: boolean } | { ok: false; error: string; attempts: number };
+export type SendResult = { ok: true; keycrmId: string; already?: boolean } | { ok: false; error: string; attempts: number; waiting?: boolean };
 
 export async function sendOrderToKeycrm(run: Run, orderNumber: string): Promise<SendResult> {
   const rows = (await run(
     `SELECT o.id, o."orderNumber", o."firstName", o."lastName", o.phone, o.email, o.comment,
             o."keycrmOrderId", o."keycrmAttempts", s.carrier::text AS carrier, s.city, s.warehouse, p.method::text AS method,
-            to_jsonb(s) ->> 'warehouseRef' AS "warehouseRef"
+            to_jsonb(s) ->> 'warehouseRef' AS "warehouseRef",
+            p.status::text AS "payStatus", o."totalAmount"::float8 AS total
      FROM "Order" o
      LEFT JOIN "Shipment" s ON s."orderId" = o.id
      LEFT JOIN "Payment" p ON p."orderId" = o.id
@@ -127,6 +136,10 @@ export async function sendOrderToKeycrm(run: Run, orderNumber: string): Promise<
   const o = rows[0];
   if (!o) return { ok: false, error: "Замовлення не знайдено", attempts: 0 };
   if (o.keycrmOrderId) return { ok: true, keycrmId: o.keycrmOrderId, already: true };
+  // Онлайн-оплата ще не завершена — замовлення поки не передаємо (передамо одразу після оплати)
+  if (o.method === "ONLINE_CARD" && o.payStatus !== "PAID") {
+    return { ok: false, error: "Очікує онлайн-оплати", attempts: Number(o.keycrmAttempts), waiting: true };
+  }
 
   const attempts = Number(o.keycrmAttempts) + 1;
   try {
@@ -170,10 +183,11 @@ export async function sendOrderToKeycrm(run: Run, orderNumber: string): Promise<
 // Для cron: добирає замовлення, які ще не в KeyCRM (з паузою, що росте після кожної невдачі).
 export async function retryPendingOrders(run: Run, maxOrders: number): Promise<{ tried: number; sent: number }> {
   const due = await run(
-    `SELECT "orderNumber" FROM "Order"
-     WHERE "keycrmOrderId" IS NULL AND "keycrmAttempts" < $1
-       AND COALESCE("keycrmTriedAt", "createdAt") < now() - (interval '5 minutes' * GREATEST("keycrmAttempts", 1))
-     ORDER BY "createdAt" LIMIT $2`,
+    `SELECT o."orderNumber" FROM "Order" o
+     WHERE o."keycrmOrderId" IS NULL AND o."keycrmAttempts" < $1
+       AND COALESCE(o."keycrmTriedAt", o."createdAt") < now() - (interval '5 minutes' * GREATEST(o."keycrmAttempts", 1))
+       AND NOT EXISTS (SELECT 1 FROM "Payment" p WHERE p."orderId" = o.id AND p.method = 'ONLINE_CARD' AND p.status <> 'PAID')
+     ORDER BY o."createdAt" LIMIT $2`,
     [MAX_ATTEMPTS, maxOrders]
   );
   let sent = 0;

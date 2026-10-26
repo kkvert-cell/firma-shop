@@ -13,6 +13,9 @@ const PAY: Record<string, string> = { CASH_ON_DELIVERY: "накладений п
 type OrderRow = Record<string, unknown>;
 
 function keycrmLabel(o: OrderRow): string {
+  if (String(o.method) === "ONLINE_CARD" && String(o.payStatus) !== "PAID" && !o.keycrmOrderId) {
+    return `<span style="color:#b36b00">… очікує онлайн-оплати (${esc(String(o.payStatus))}); в KeyCRM піде після оплати</span>`;
+  }
   const num = esc(String(o.orderNumber));
   const resend = ` <a href="/api/orders/send?key=${KEY_PLACEHOLDER}&number=${num}">${"надіслати в KeyCRM ще раз"}</a>`;
   if (o.keycrmOrderId) return `<span style="color:#117a2b">✓ у KeyCRM, замовлення №${esc(String(o.keycrmOrderId))}</span>`;
@@ -31,7 +34,7 @@ export async function GET(req: NextRequest) {
     const run = getRunner();
     const orders = await run(
       `SELECT o.id, o."orderNumber", o."createdAt", o."firstName", o."lastName", o.phone, o.email, o.comment,
-              o."totalAmount"::float8 AS total, o.status, o."keycrmOrderId", o."keycrmAttempts", o."keycrmError", s.carrier, s.city, s.warehouse, p.method
+              o."totalAmount"::float8 AS total, o.status, o."keycrmOrderId", o."keycrmAttempts", o."keycrmError", s.carrier, s.city, s.warehouse, p.method, p.status AS "payStatus"
        FROM "Order" o
        LEFT JOIN "Shipment" s ON s."orderId" = o.id
        LEFT JOIN "Payment" p ON p."orderId" = o.id
@@ -49,7 +52,7 @@ export async function GET(req: NextRequest) {
           <b>${esc(String(o.orderNumber))}</b> · ${esc(fmt.format(new Date(o.createdAt as string)))} · ${esc(String(o.status))}<br>
           ${keycrmLabel(o)}<br>
           ${esc(String(o.firstName))} ${esc(String(o.lastName))}, <a href="tel:${esc(String(o.phone))}">${esc(String(o.phone))}</a>${o.email ? ", " + esc(String(o.email)) : ""}<br>
-          ${esc(CARRIER[String(o.carrier)] ?? String(o.carrier))}: ${esc(String(o.city))}, ${esc(String(o.warehouse))} · оплата: ${esc(PAY[String(o.method)] ?? String(o.method))}<br>
+          ${esc(CARRIER[String(o.carrier)] ?? String(o.carrier))}: ${esc(String(o.city))}, ${esc(String(o.warehouse))} · оплата: ${esc(PAY[String(o.method)] ?? String(o.method))}${String(o.method) === "ONLINE_CARD" ? (String(o.payStatus) === "PAID" ? " — <b style=\"color:#117a2b\">сплачено</b>" : " — не сплачено") : ""}<br>
           ${o.comment ? "Коментар: " + esc(String(o.comment)) + "<br>" : ""}
           <ul>${its.map((i) => `<li>${esc(String(i.name))}${i.vendorCode ? " [" + esc(String(i.vendorCode)) + "]" : ""} — ${Number(i.quantity)} × ${formatPrice(Number(i.price))} ₴</li>`).join("")}</ul>
           <b>Разом: ${formatPrice(Number(o.total))} ₴</b></div>`;

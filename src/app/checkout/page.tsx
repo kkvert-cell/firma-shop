@@ -21,6 +21,7 @@ export default function CheckoutPage() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [problems, setProblems] = useState<Problem[]>([]);
   const [busy, setBusy] = useState(false);
+  const [onlinePay, setOnlinePay] = useState(false);
   const token = useRef<string>("");
 
   useEffect(() => {
@@ -31,6 +32,8 @@ export default function CheckoutPage() {
       sessionStorage.setItem("firma-order-token", t);
     }
     token.current = t;
+    // пункт «Картка онлайн» показуємо, лише якщо оплату підключено
+    fetch("/api/payment/methods").then((r) => r.json()).then((d) => setOnlinePay(!!d.online)).catch(() => {});
   }, []);
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -61,7 +64,7 @@ export default function CheckoutPage() {
       if (res.ok) {
         sessionStorage.removeItem("firma-order-token");
         clear();
-        router.push(`/order/${data.orderNumber}?t=${encodeURIComponent(data.token)}`);
+        router.push(`/order/${data.orderNumber}?t=${encodeURIComponent(data.token)}${form.payment === "ONLINE_CARD" ? "&pay=1" : ""}`);
         return;
       }
       if (data.fields) setErrors(data.fields);
@@ -134,6 +137,9 @@ export default function CheckoutPage() {
             <legend>Оплата</legend>
             <label className="check"><input type="radio" name="payment" checked={form.payment === "CASH_ON_DELIVERY"} onChange={() => setForm((f) => ({ ...f, payment: "CASH_ON_DELIVERY" }))} /> Накладений платіж (оплата при отриманні)</label>
             <label className="check"><input type="radio" name="payment" checked={form.payment === "BANK_TRANSFER"} onChange={() => setForm((f) => ({ ...f, payment: "BANK_TRANSFER" }))} /> Оплата за реквізитами (менеджер надішле їх вам)</label>
+            {onlinePay && (
+              <label className="check"><input type="radio" name="payment" checked={form.payment === "ONLINE_CARD"} onChange={() => setForm((f) => ({ ...f, payment: "ONLINE_CARD" }))} /> Картка онлайн (Visa, Mastercard, Apple Pay, Google Pay)</label>
+            )}
             {err("payment")}
           </fieldset>
 

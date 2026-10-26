@@ -14,14 +14,14 @@ export type OrderInput = {
   point: string;
   cityRef: string | null; // код города Новой почты (если выбран из списка)
   pointRef: string | null; // код отделения Новой почты
-  payment: "CASH_ON_DELIVERY" | "BANK_TRANSFER";
+  payment: "CASH_ON_DELIVERY" | "BANK_TRANSFER" | "ONLINE_CARD";
   comment: string | null;
   items: { id: string; qty: number }[];
 };
 
 export type Problem = { id: string; name: string; reason: string };
 export type OrderResult =
-  | { ok: true; orderNumber: string; token: string }
+  | { ok: true; orderNumber: string; token: string; total?: number; created?: boolean }
   | { ok: false; status: number; error: string; problems?: Problem[]; fields?: Record<string, string> };
 
 export function normalizePhone(raw: string): string | null {
@@ -63,7 +63,8 @@ export function validateOrder(body: unknown): { ok: true; value: OrderInput } | 
   const cityRef = carrier === "NOVA_POSHTA" ? refOk(b.cityRef) : null;
   const pointRef = carrier === "NOVA_POSHTA" && cityRef ? refOk(b.pointRef) : null;
 
-  const payment = b.payment === "BANK_TRANSFER" ? "BANK_TRANSFER" : b.payment === "CASH_ON_DELIVERY" ? "CASH_ON_DELIVERY" : null;
+  const payment =
+    b.payment === "BANK_TRANSFER" ? "BANK_TRANSFER" : b.payment === "CASH_ON_DELIVERY" ? "CASH_ON_DELIVERY" : b.payment === "ONLINE_CARD" ? "ONLINE_CARD" : null;
   if (!payment) fields.payment = "Оберіть спосіб оплати";
 
   const itemsRaw = Array.isArray(b.items) ? b.items : [];
@@ -178,7 +179,7 @@ export async function createOrder(run: Run, input: OrderInput): Promise<OrderRes
         console.error("shipment refs:", e);
       }
     }
-    return { ok: true, orderNumber, token: input.token };
+    return { ok: true, orderNumber, token: input.token, total, created: true };
   } catch (err) {
     // Гонка: та сама форма відправлена двічі одночасно — друга впирається в унікальний токен
     const again = await run(`SELECT "orderNumber" FROM "Order" WHERE "clientToken" = $1`, [input.token]);

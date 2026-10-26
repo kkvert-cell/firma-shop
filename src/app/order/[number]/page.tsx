@@ -2,7 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { getRunner } from "@/lib/catalog";
-import { SHOP_PHONE, SHOP_PHONE_TEXT, formatPrice } from "@/lib/site";
+import { SHOP_PHONE, SHOP_PHONE_TEXT, SITE_URL, formatPrice } from "@/lib/site";
+import { buildPayForm } from "@/lib/payments";
+import PayForm from "@/components/PayForm";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Замовлення прийнято", robots: { index: false, follow: false } };
@@ -26,7 +28,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
   try {
     const run = getRunner();
     const rows = await run(
-      `SELECT o.id, o."orderNumber", o."totalAmount"::float8 AS total, o.comment, o."firstName", p.method
+      `SELECT o.id, o."orderNumber", o."totalAmount"::float8 AS total, o.comment, o."firstName", p.method, p.status AS "payStatus"
        FROM "Order" o LEFT JOIN "Payment" p ON p."orderId" = o.id
        WHERE o."orderNumber" = $1 AND o."clientToken" = $2`,
       [number, token]
@@ -44,10 +46,34 @@ export default async function OrderPage({ params, searchParams }: Props) {
   }
   if (!order) notFound();
   const s = ship?.[0];
+  const needsPayment = String(order.method) === "ONLINE_CARD" && String(order.payStatus) !== "PAID" && String(order.payStatus) !== "REFUNDED";
+  const payForm = needsPayment
+    ? buildPayForm({
+        orderNumber: String(order.orderNumber),
+        token,
+        total: Number(order.total),
+        items: (items ?? []).map((it) => ({ name: String(it.name), qty: Number(it.quantity), price: Number(it.price) })),
+        siteUrl: SITE_URL,
+      })
+    : null;
+  const autoPay = (Array.isArray((await searchParams).pay) ? (await searchParams).pay?.[0] : (await searchParams).pay) === "1";
 
   return (
     <main>
       <h1 className="heading page-title">Дякуємо, {String(order.firstName)}! Замовлення {String(order.orderNumber)} прийнято</h1>
+      {String(order.method) === "ONLINE_CARD" && String(order.payStatus) === "PAID" && (
+        <p className="notice">✓ Оплату отримано. Дякуємо!</p>
+      )}
+      {payForm && (
+        <div className="card order-box">
+          <h2 className="heading section-title">Оплата карткою</h2>
+          <p className="muted">Замовлення буде передано в обробку одразу після оплати. Якщо ви вже заплатили, статус оновиться протягом хвилини.</p>
+          <PayForm action={payForm.action} fields={payForm.fields} auto={autoPay} label={`Сплатити ${formatPrice(Number(order.total))} ₴`} />
+        </div>
+      )}
+      {needsPayment && !payForm && (
+        <p className="notice error">Онлайн-оплата тимчасово недоступна. Ми зв&apos;яжемось з вами та запропонуємо інший спосіб оплати.</p>
+      )}
       <p className="muted">Менеджер зв&apos;яжеться з вами найближчим часом для підтвердження. Якщо потрібно швидше — зателефонуйте: <a href={`tel:${SHOP_PHONE}`}>{SHOP_PHONE_TEXT}</a>.</p>
 
       <div className="card order-box">
@@ -67,7 +93,7 @@ export default async function OrderPage({ params, searchParams }: Props) {
           </tbody>
         </table>
         {s && <p className="muted">Доставка: {CARRIER[String(s.carrier)] ?? String(s.carrier)}, {String(s.city)}, {String(s.warehouse)}</p>}
-        <p className="muted">Оплата: {PAY[String(order.method)] ?? "—"}</p>
+        <p className="muted">Оплата: {PAY[String(order.method)] ?? "—"}{String(order.method) === "ONLINE_CARD" ? (String(order.payStatus) === "PAID" ? " — сплачено" : " — очікує оплати") : ""}</p>
         <p className="muted">Вартість доставки сплачується за тарифами перевізника.</p>
       </div>
 
