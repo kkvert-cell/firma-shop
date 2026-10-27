@@ -24,6 +24,17 @@ export default function NovaPoshtaPicker({ value, onChange, errors }: Props) {
   const [whs, setWhs] = useState<Warehouse[]>([]);
   const [whLoading, setWhLoading] = useState(false);
   const cityReq = useRef(0);
+
+  // данные могут подставиться снаружи (автозаполнение из кабинета) — показываем их в поле города
+  useEffect(() => {
+    if (value.cityRef && value.city && value.city !== cityText) setCityText(value.city);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value.cityRef, value.city]);
+
+  // підставлено адресу без кодів Нової пошти (замовлення було введене вручну) — показуємо її в ручному режимі
+  useEffect(() => {
+    if (!manual && value.city && value.point && !value.cityRef && !value.pointRef) setManual(true);
+  }, [manual, value.city, value.point, value.cityRef, value.pointRef]);
   const whReq = useRef(0);
 
   function fail(status: number) {

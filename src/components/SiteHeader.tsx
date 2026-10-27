@@ -12,6 +12,7 @@ export default function SiteHeader() {
           <button type="submit" className="btn-primary">Знайти</button>
         </form>
         <a href={`tel:${SHOP_PHONE}`} className="header-link header-phone">{SHOP_PHONE_TEXT}</a>
+        <Link href="/account" className="header-link">Кабінет</Link>
         <CartLink />
       </div>
     </header>

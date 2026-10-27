@@ -33,6 +33,27 @@ export default function CheckoutPage() {
     }
     token.current = t;
     // пункт «Картка онлайн» показуємо, лише якщо оплату підключено
+    // якщо покупець увійшов у кабінет — підставляємо дані з останнього замовлення
+    fetch("/api/account/prefill")
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d || !d.firstName) return;
+        setForm((f) =>
+          f.firstName || f.phone
+            ? f
+            : {
+                ...f,
+                firstName: d.firstName ?? "",
+                lastName: d.lastName ?? "",
+                phone: d.phone ?? "",
+                email: d.email ?? "",
+                ...(d.carrier === "UKRPOSHTA"
+                  ? { carrier: "UKRPOSHTA", city: d.city ?? "", point: d.point ?? "" }
+                  : { carrier: "NOVA_POSHTA", city: d.city ?? "", cityRef: d.cityRef ?? "", point: d.point ?? "", pointRef: d.pointRef ?? "" }),
+              }
+        );
+      })
+      .catch(() => {});
     fetch("/api/payment/methods").then((r) => r.json()).then((d) => setOnlinePay(!!d.online)).catch(() => {});
   }, []);
 
