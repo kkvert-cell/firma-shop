@@ -4,6 +4,7 @@ import { getRunner } from "@/lib/catalog";
 import { formatPrice } from "@/lib/site";
 import { fmtDate, keycrmChip, payChip, STATUS_LABEL } from "@/lib/admin-format";
 import { getState } from "@/lib/sync-state";
+import { loadPromState } from "@/lib/prom-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ const KYIV_NOW = `(now() AT TIME ZONE 'Europe/Kyiv')`;
 export default async function AdminDashboard() {
   await requireAdmin();
   const run = getRunner();
-  const [stats, prod, recent, lastRun] = await Promise.all([
+  const [stats, prod, recent, lastRun, prom] = await Promise.all([
     run(`SELECT
            count(*) FILTER (WHERE status = 'NEW')::int AS "newCount",
            count(*) FILTER (WHERE "keycrmOrderId" IS NULL AND "keycrmAttempts" >= 6 AND "keycrmAttempts" < 99)::int AS "keycrmBad",
@@ -29,6 +30,7 @@ export default async function AdminDashboard() {
                 o."totalAmount"::float8 AS total, o."keycrmOrderId", o."keycrmAttempts", p.method::text AS method, p.status::text AS "payStatus"
          FROM "Order" o LEFT JOIN "Payment" p ON p."orderId" = o.id ORDER BY o."createdAt" DESC LIMIT 8`),
     getState(run, "keycrm_last_run"),
+    loadPromState(run),
   ]);
   const s = stats[0] ?? {};
   const p = prod[0] ?? {};
@@ -61,6 +63,8 @@ export default async function AdminDashboard() {
       <p className="muted small">
         {p.syncedAt ? `Залишки з KeyCRM оновлено: ${fmtDate(p.syncedAt)} (київський час).` : "Залишки з KeyCRM ще не оновлювались."}
         {lastRun ? "" : " Автооновлення ще не запускалось."}
+        {" "}
+        {prom.active ? "Каталог з Prom оновлюється зараз." : prom.lastDone ? `Ціни з Prom оновлено: ${fmtDate(prom.lastDone)}.` : "Ціни з Prom ще не оновлювались автоматично."}
       </p>
 
       <h2 className="heading section-title">Останні замовлення</h2>

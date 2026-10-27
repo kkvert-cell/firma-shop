@@ -8,6 +8,22 @@ import { syncStockChunk } from "./keycrm-sync";
 import { linkArticles } from "./prom-articles";
 import { retryPendingOrders } from "./keycrm-orders";
 import { getState, setState } from "./sync-state";
+import { promRefreshStep } from "./prom-refresh";
+
+// Другий розклад: оновлення каталогу з Prom (окремим запуском, щоб не ділити ліміти із залишками й замовленнями).
+// Той самий рядок має стояти в wrangler.json → triggers.crons.
+export const PROM_CRON = "2,12,22,32,42,52 * * * *";
+
+export async function runPromRefresh(now: Date = new Date()) {
+  const feedUrl = process.env.PROM_FEED_URL;
+  if (!feedUrl) return;
+  try {
+    const r = await promRefreshStep(getSql() as unknown as Run, feedUrl, now, Number(process.env.PROM_REFRESH_HOURS) || 12);
+    if (r.status !== "idle") console.log("[cron] Каталог Prom:", JSON.stringify(r));
+  } catch (err) {
+    console.error("[cron] Помилка оновлення каталогу Prom:", err);
+  }
+}
 
 const PAGES_PER_RUN = 20; // 20 страниц KeyCRM + запросы к базе — в пределах лимита запросов одного запуска
 const ORDERS_PER_RUN = 3; // сколько заказов за раз добираем в KeyCRM

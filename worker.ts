@@ -2,15 +2,16 @@
 // ВАЖНО: файл собирает wrangler, а не Next.js (поэтому он исключён из tsconfig).
 // @ts-ignore — файл создаётся при сборке (opennextjs-cloudflare build)
 import handler from "./.open-next/worker.js";
-import { runScheduled } from "./src/lib/scheduled";
+import { PROM_CRON, runPromRefresh, runScheduled } from "./src/lib/scheduled";
 
 export default {
   fetch: handler.fetch,
 
-  async scheduled(event: { scheduledTime: number }, env: Record<string, unknown>, ctx: { waitUntil(p: Promise<unknown>): void }) {
+  async scheduled(event: { scheduledTime: number; cron?: string }, env: Record<string, unknown>, ctx: { waitUntil(p: Promise<unknown>): void }) {
     // Next.js читает настройки из process.env; для запуска по расписанию переносим секреты туда сами
     for (const [k, v] of Object.entries(env)) if (typeof v === "string") process.env[k] = v;
-    ctx.waitUntil(runScheduled(new Date(event.scheduledTime)));
+    const when = new Date(event.scheduledTime);
+    ctx.waitUntil(event.cron === PROM_CRON ? runPromRefresh(when) : runScheduled(when));
   },
 };
 
