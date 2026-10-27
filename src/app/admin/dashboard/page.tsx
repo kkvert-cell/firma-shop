@@ -1,74 +1,90 @@
 import Link from "next/link";
+import { requireAdmin } from "@/lib/admin-auth";
+import { getRunner } from "@/lib/catalog";
+import { formatPrice } from "@/lib/site";
+import { fmtDate, keycrmChip, payChip, STATUS_LABEL } from "@/lib/admin-format";
+import { getState } from "@/lib/sync-state";
 
-// Главный экран админки. В реальном проекте цифры приходят агрегирующими
-// запросами к Order/Product (COUNT, SUM, GROUP BY). Доступ защищён middleware,
-// проверяющим role === "ADMIN" | "MANAGER" (см. User.role в schema.prisma).
+export const dynamic = "force-dynamic";
 
-const stats = [
-  { label: "Замовлення сьогодні", value: "7" },
-  { label: "Продажі за місяць", value: "142 800 ₴" },
-  { label: "Середній чек", value: "894 ₴" },
-  { label: "Товарів з низьким залишком", value: "12" },
-];
+const KYIV_CREATED = `("createdAt" AT TIME ZONE 'UTC' AT TIME ZONE 'Europe/Kyiv')`;
+const KYIV_NOW = `(now() AT TIME ZONE 'Europe/Kyiv')`;
 
-const recentOrders = [
-  { id: "F-10241", customer: "Ігор П.", total: 947, status: "Новe" },
-  { id: "F-10240", customer: "ТОВ «Технобуд»", total: 12400, status: "Очікує оплати" },
-  { id: "F-10239", customer: "Марія К.", total: 349, status: "Відправлено" },
-];
+export default async function AdminDashboard() {
+  await requireAdmin();
+  const run = getRunner();
+  const [stats, prod, recent, lastRun] = await Promise.all([
+    run(`SELECT
+           count(*) FILTER (WHERE status = 'NEW')::int AS "newCount",
+           count(*) FILTER (WHERE "keycrmOrderId" IS NULL AND "keycrmAttempts" >= 6 AND "keycrmAttempts" < 99)::int AS "keycrmBad",
+           count(*) FILTER (WHERE date_trunc('day', ${KYIV_CREATED}) = date_trunc('day', ${KYIV_NOW}))::int AS today,
+           coalesce(sum("totalAmount") FILTER (WHERE date_trunc('month', ${KYIV_CREATED}) = date_trunc('month', ${KYIV_NOW}) AND status <> 'CANCELLED'), 0)::float8 AS "monthSum",
+           count(*) FILTER (WHERE date_trunc('month', ${KYIV_CREATED}) = date_trunc('month', ${KYIV_NOW}) AND status <> 'CANCELLED')::int AS "monthCount"
+         FROM "Order"`),
+    run(`SELECT count(*)::int AS total,
+                count(*) FILTER (WHERE NOT "isAvailable" OR "stockQty" <= 0)::int AS "outOfStock",
+                max("stockSyncedAt")::text AS "syncedAt"
+         FROM "Product"`),
+    run(`SELECT o."orderNumber", o."createdAt"::text AS "createdAt", o.status::text AS status, o."firstName", o."lastName",
+                o."totalAmount"::float8 AS total, o."keycrmOrderId", o."keycrmAttempts", p.method::text AS method, p.status::text AS "payStatus"
+         FROM "Order" o LEFT JOIN "Payment" p ON p."orderId" = o.id ORDER BY o."createdAt" DESC LIMIT 8`),
+    getState(run, "keycrm_last_run"),
+  ]);
+  const s = stats[0] ?? {};
+  const p = prod[0] ?? {};
+  const problems = Number(s.keycrmBad ?? 0);
 
-const navSections = [
-  { href: "/admin/products", label: "Товари" },
-  { href: "/admin/products/import", label: "Імпорт з Excel" },
-  { href: "/admin/categories", label: "Категорії" },
-  { href: "/admin/orders", label: "Замовлення" },
-  { href: "/admin/customers", label: "Клієнти" },
-  { href: "/admin/seo", label: "SEO" },
-];
+  const cards: { label: string; value: string; href?: string; tone?: string }[] = [
+    { label: "Нові замовлення", value: String(s.newCount ?? 0), href: "/admin/orders?f=new", tone: Number(s.newCount) > 0 ? "warn" : undefined },
+    { label: "Замовлень сьогодні", value: String(s.today ?? 0) },
+    { label: "Продажі за місяць", value: `${formatPrice(Number(s.monthSum ?? 0))} ₴ (${s.monthCount ?? 0})` },
+    { label: "Немає в наявності", value: `${p.outOfStock ?? 0} з ${p.total ?? 0}`, href: "/admin/products?f=out" },
+  ];
 
-export default function AdminDashboard() {
   return (
-    <main className="admin-layout">
-      <nav className="card" style={{ padding: "var(--space-4)" }}>
-        {navSections.map((item) => (
-          <Link key={item.href} href={item.href} style={{ display: "block", padding: "var(--space-2) 0" }}>
-            {item.label}
-          </Link>
-        ))}
-      </nav>
+    <main className="adm-main">
+      <h1 className="heading page-title">Огляд</h1>
+      {problems > 0 && (
+        <p className="notice error">Є замовлення, які не потрапили в KeyCRM. <Link href="/admin/orders?f=keycrm">Подивитись</Link></p>
+      )}
+      <div className="adm-cards">
+        {cards.map((c) => {
+          const inner = (
+            <>
+              <span className="adm-card-label">{c.label}</span>
+              <span className={`adm-card-value${c.tone ? " " + c.tone : ""}`}>{c.value}</span>
+            </>
+          );
+          return c.href ? <Link key={c.label} href={c.href} className="adm-card">{inner}</Link> : <div key={c.label} className="adm-card">{inner}</div>;
+        })}
+      </div>
+      <p className="muted small">
+        {p.syncedAt ? `Залишки з KeyCRM оновлено: ${fmtDate(p.syncedAt)} (київський час).` : "Залишки з KeyCRM ще не оновлювались."}
+        {lastRun ? "" : " Автооновлення ще не запускалось."}
+      </p>
 
-      <section>
-        <h1 className="heading" style={{ fontSize: "var(--text-2xl)", marginBottom: "var(--space-4)" }}>
-          Дашборд
-        </h1>
-
-        <div className="stats-grid">
-          {stats.map((stat) => (
-            <div key={stat.label} className="card" style={{ padding: "var(--space-4)" }}>
-              <div style={{ fontSize: "var(--text-sm)", color: "var(--color-ink-muted)" }}>{stat.label}</div>
-              <div className="data" style={{ fontSize: "var(--text-xl)" }}>{stat.value}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="tick-divider" style={{ margin: "var(--space-6) 0" }} />
-
-        <h2 className="heading" style={{ fontSize: "var(--text-lg)", marginBottom: "var(--space-3)" }}>
-          Останні замовлення
-        </h2>
-        {recentOrders.map((order) => (
-          <div
-            key={order.id}
-            className="card"
-            style={{ padding: "var(--space-3)", marginBottom: "var(--space-2)", display: "flex", justifyContent: "space-between" }}
-          >
-            <span className="data">{order.id}</span>
-            <span>{order.customer}</span>
-            <span style={{ color: "var(--color-ink-muted)" }}>{order.status}</span>
-            <span className="price data">{order.total} ₴</span>
-          </div>
-        ))}
-      </section>
+      <h2 className="heading section-title">Останні замовлення</h2>
+      {recent.length === 0 && <p className="muted">Замовлень ще немає.</p>}
+      <ul className="adm-list">
+        {recent.map((o) => {
+          const pc = payChip(o.method, o.payStatus);
+          const kc = keycrmChip(o);
+          return (
+            <li key={String(o.orderNumber)}>
+              <Link href={`/admin/orders/${o.orderNumber}`} className="adm-row">
+                <span className="adm-row-main"><b>{String(o.orderNumber)}</b> · {String(o.lastName)} {String(o.firstName)}</span>
+                <span className="adm-row-sub">{fmtDate(o.createdAt)} · {formatPrice(Number(o.total))} ₴</span>
+                <span className="adm-chips">
+                  <span className="chip mute">{STATUS_LABEL[String(o.status)] ?? String(o.status)}</span>
+                  <span className={`chip ${pc.tone}`}>{pc.text}</span>
+                  <span className={`chip ${kc.tone}`}>{kc.text}</span>
+                </span>
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+      <p><Link href="/admin/orders">Усі замовлення →</Link></p>
     </main>
   );
 }
