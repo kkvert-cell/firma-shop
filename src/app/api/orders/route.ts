@@ -3,6 +3,7 @@ import { getRunner } from "@/lib/catalog";
 import { createOrder, validateOrder } from "@/lib/orders";
 import { sendOrderToKeycrm } from "@/lib/keycrm-orders";
 import { notifyOwner } from "@/lib/notify";
+import { sendOrderEmail } from "@/lib/order-email";
 import { activeProvider } from "@/lib/payments";
 import { formatPrice } from "@/lib/site";
 
@@ -42,6 +43,7 @@ export async function POST(req: NextRequest) {
       after(async () => {
         try {
           if (v2.payment !== "ONLINE_CARD") {
+            await sendOrderEmail(getRunner(), number);
             await notifyOwner(`🛒 Нове замовлення ${number} на ${formatPrice(r.total ?? 0)} ₴: ${v2.lastName} ${v2.firstName}, ${v2.phone}.`);
             if (process.env.KEYCRM_API_KEY) await sendOrderToKeycrm(getRunner(), number);
           }
