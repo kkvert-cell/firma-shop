@@ -8,6 +8,7 @@ export default function ProductCard({ p }: { p: ProductCardData }) {
   return (
     <Link href={`/product/${p.slug}`} className="card product-card">
       <div className="product-card-img">
+        {p.oldPrice && p.oldPrice > p.price && p.price > 0 && <span className="discount-badge">−{Math.round(((p.oldPrice - p.price) / p.oldPrice) * 100)}%</span>}
         {p.image ? <SmartImage src={thumb(p.image, 320)} fallback={p.image} alt={p.name} /> : <span className="no-photo">Немає фото</span>}
       </div>
       <div className="product-card-title">{p.name}</div>

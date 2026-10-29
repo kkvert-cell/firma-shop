@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getSql } from "@/lib/db";
+import ProductCard from "@/components/ProductCard";
+import { COLLECTION_KINDS, COLLECTION_TITLES, getHomeCollections, getRunner, type CollectionKind } from "@/lib/catalog";
 
 // force-dynamic: страница не запекается статикой при сборке (тогда список
 // категорий/остатки были бы "заморожены" на момент билда) — данные
@@ -23,8 +25,17 @@ async function loadCategories() {
   }
 }
 
+async function loadCollections() {
+  try {
+    return await getHomeCollections(getRunner());
+  } catch (err) {
+    console.error("Не вдалося завантажити підбірки:", err);
+    return null;
+  }
+}
+
 export default async function HomePage() {
-  const { categories, error } = await loadCategories();
+  const [{ categories, error }, collections] = await Promise.all([loadCategories(), loadCollections()]);
   return (
     <main>
       {/* Hero: поиск — это то, чем реально будут пользоваться в первую очередь */}
@@ -72,6 +83,20 @@ export default async function HomePage() {
           ))}
         </div>
       </section>
+
+      {/* Подборки «Акции», «Хиты», «Новинки»: пустые не показываем */}
+      {collections &&
+        COLLECTION_KINDS.filter((k: CollectionKind) => collections[k].length > 0).map((k: CollectionKind) => (
+          <section key={k} className="home-block">
+            <div className="home-block-head">
+              <h2 className="heading" style={{ fontSize: "var(--text-xl)" }}>{COLLECTION_TITLES[k]}</h2>
+              <Link href={`/collection/${k}`}>Усі →</Link>
+            </div>
+            <div className="product-row">
+              {collections[k].map((p) => <ProductCard key={p.id} p={p} />)}
+            </div>
+          </section>
+        ))}
 
       <div className="tick-divider" style={{ margin: "var(--space-8) 0" }} />
 

@@ -96,19 +96,20 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
       brandSlug: it.brand ? slugify(it.brand) : null,
       vendorCode: it.vendorCode,
       price: it.price,
+      oldPrice: it.oldPrice,
       currency: it.currency,
       available: it.available,
       sourceUrl: it.sourceUrl,
     });
   }
   await sql(
-    `INSERT INTO "Product"("sku","externalId","vendorCode","slug","name","description","categoryId","brandId","price","currency","isAvailable","sourceUrl","syncedAt","updatedAt")
+    `INSERT INTO "Product"("sku","externalId","vendorCode","slug","name","description","categoryId","brandId","price","oldPrice","currency","isAvailable","sourceUrl","syncedAt","updatedAt")
      SELECT 'prom-' || x."externalId", x."externalId", x."vendorCode", x.slug, x.name, x.description,
             (SELECT c.id FROM "Category" c WHERE c.path = x."categoryPath"),
             (SELECT b.id FROM "Brand" b WHERE b.slug = x."brandSlug"),
-            COALESCE(x.price, 0), x.currency, x.available, x."sourceUrl", $2::timestamp, now()
+            COALESCE(x.price, 0), x."oldPrice", x.currency, x.available, x."sourceUrl", $2::timestamp, now()
      FROM jsonb_to_recordset($1::jsonb) AS x("externalId" text, "vendorCode" text, slug text, name text, description text,
-          "categoryPath" text, "brandSlug" text, price numeric, currency text, available boolean, "sourceUrl" text)
+          "categoryPath" text, "brandSlug" text, price numeric, "oldPrice" numeric, currency text, available boolean, "sourceUrl" text)
      ON CONFLICT ("externalId") DO UPDATE SET
        slug = EXCLUDED.slug,
        name = CASE WHEN 'name' = ANY("Product"."lockedFields") THEN "Product".name ELSE EXCLUDED.name END,
@@ -117,6 +118,7 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
        "categoryId" = CASE WHEN 'category' = ANY("Product"."lockedFields") THEN "Product"."categoryId" ELSE EXCLUDED."categoryId" END,
        "brandId" = CASE WHEN 'brand' = ANY("Product"."lockedFields") THEN "Product"."brandId" ELSE EXCLUDED."brandId" END,
        price = CASE WHEN 'price' = ANY("Product"."lockedFields") THEN "Product".price ELSE EXCLUDED.price END,
+       "oldPrice" = CASE WHEN 'price' = ANY("Product"."lockedFields") THEN "Product"."oldPrice" ELSE EXCLUDED."oldPrice" END,
        currency = EXCLUDED.currency,
        "isAvailable" = CASE WHEN "Product"."stockSyncedAt" IS NOT NULL THEN "Product"."isAvailable" ELSE EXCLUDED."isAvailable" END,
        "sourceUrl" = EXCLUDED."sourceUrl",

@@ -26,7 +26,7 @@ export default async function AdminProduct({ params, searchParams }: { params: P
     await run(
       `SELECT p.id, p.name, p.slug, p.description, p.price::float8 AS price, p."oldPrice"::float8 AS "oldPrice", p."categoryId", p."vendorCode",
               p."isHidden", p."isAvailable", p."externalId", p."stockQty", p."stockSyncedAt" IS NOT NULL AS exact, p."seoTitle", p."seoDescription",
-              p."lockedFields", b.name AS brand
+              p."lockedFields", p."homeFlags", b.name AS brand
        FROM "Product" p LEFT JOIN "Brand" b ON b.id = p."brandId" WHERE p.id = $1`,
       [id]
     )
@@ -73,6 +73,13 @@ export default async function AdminProduct({ params, searchParams }: { params: P
         )}
         <label>SEO: заголовок сторінки<input name="seoTitle" defaultValue={String(p.seoTitle ?? "")} maxLength={200} /></label>
         <label>SEO: короткий опис для Google<textarea name="seoDescription" rows={2} defaultValue={String(p.seoDescription ?? "")} maxLength={400} /></label>
+        <fieldset className="adm-flags">
+          <legend>Показувати на головній сторінці</legend>
+          {([["hit", "Хіт продажів"], ["new", "Новинка"], ["sale", "Акція"]] as const).map(([k, label]) => (
+            <label key={k} className="check"><input type="checkbox" name={`flag_${k}`} defaultChecked={((p.homeFlags as string[] | null) ?? []).includes(k)} /> {label}</label>
+          ))}
+          <p className="muted small">Товар із «Старою ціною» вище за поточну потрапляє в «Акції» автоматично. «Хіти» також заповнюються самі за продажами, а «Новинки» — за новими товарами.</p>
+        </fieldset>
         <label className="check"><input type="checkbox" name="visible" defaultChecked={!p.isHidden} /> Показувати на сайті</label>
         {!p.exact && <label className="check"><input type="checkbox" name="available" defaultChecked={Boolean(p.isAvailable)} /> Є в наявності (залишок із KeyCRM для цього товару не підтягується; вкажіть артикул)</label>}
         {Boolean(p.exact) && <p className="muted small">Наявність і залишок ({Number(p.stockQty)} шт.) приходять із KeyCRM автоматично.</p>}

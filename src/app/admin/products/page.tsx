@@ -24,7 +24,7 @@ export default async function AdminProducts({ searchParams }: { searchParams: Pr
   if (f === "edited") where.push(`cardinality("lockedFields") > 0`);
   if (f === "own") where.push(`"externalId" IS NULL`);
   const rows = await getRunner()(
-    `SELECT id, name, "vendorCode", price::float8 AS price, "stockQty", "isAvailable", "isHidden", "externalId", cardinality("lockedFields") AS locks,
+    `SELECT id, name, "vendorCode", price::float8 AS price, "stockQty", "isAvailable", "isHidden", "externalId", cardinality("lockedFields") AS locks, cardinality("homeFlags") AS flags,
             "stockSyncedAt" IS NOT NULL AS exact,
             (SELECT i.url FROM "ProductImage" i WHERE i."productId" = "Product".id ORDER BY i."sortOrder" LIMIT 1) AS image
      FROM "Product" ${where.length ? "WHERE " + where.join(" AND ") : ""}
@@ -63,6 +63,7 @@ export default async function AdminProducts({ searchParams }: { searchParams: Pr
                   {!p.isHidden && <span className={`chip ${p.isAvailable && (!p.exact || Number(p.stockQty) > 0) ? "ok" : "warn"}`}>{p.isAvailable && (!p.exact || Number(p.stockQty) > 0) ? "є в наявності" : "немає в наявності"}</span>}
                   {!p.externalId && <span className="chip mute">власний товар</span>}
                   {Number(p.locks) > 0 && <span className="chip mute">змінено вручну</span>}
+                  {Number(p.flags) > 0 && <span className="chip ok">на головній</span>}
                 </span>
               </span>
             </Link>

@@ -541,3 +541,14 @@ a.btn-primary:hover { text-decoration: none; }
 .adm-thumbs img { object-fit: cover; border-radius: 6px; border: var(--border-hairline); }
 .adm-delete { display: grid; gap: var(--space-2, 8px); margin-top: var(--space-3, 12px); }
 .pdp-description p { white-space: pre-line; }
+
+/* Главная: подборки «Акции», «Хиты», «Новинки» */
+.product-card-img { position: relative; }
+.discount-badge { position: absolute; top: 8px; left: 8px; z-index: 1; padding: 2px 6px; border-radius: 4px; background: #c4262e; color: #fff; font-size: 12px; font-weight: 700; line-height: 1.5; }
+.home-block { margin: var(--space-6, 32px) 0; }
+.home-block-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3, 12px); margin-bottom: var(--space-3, 12px); }
+.product-row { display: flex; gap: var(--space-3, 12px); overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: var(--space-2, 8px); -webkit-overflow-scrolling: touch; }
+.product-row > .product-card { flex: 0 0 168px; scroll-snap-align: start; }
+@media (min-width: 720px) { .product-row > .product-card { flex-basis: 200px; } }
+.adm-flags { border: var(--border-hairline); border-radius: var(--radius); padding: var(--space-3, 12px); display: grid; gap: var(--space-2, 8px); }
+.adm-flags legend { padding: 0 6px; font-weight: 600; }

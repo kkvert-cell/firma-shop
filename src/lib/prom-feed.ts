@@ -10,7 +10,8 @@ export type FeedItem = {
   sourceUrl: string;
   images: string[];
   available: boolean; // "in stock" / "out of stock" — точного количества в этом фиде нет
-  price: number | null;
+  price: number | null; // цена, по которой продаём (со скидкой, если она есть в фиде)
+  oldPrice: number | null; // обычная цена до скидки (из g:sale_price), иначе null
   currency: string;
   categoryPath: string[]; // ["Інструменти", "Електроінструмент", "Дрилі, шуруповерти"]
   brand: string | null;
@@ -84,6 +85,11 @@ export function parseItem(raw: string): FeedItem | null {
   const priceMatch = priceRaw.match(/([\d.,]+)\s*([A-Z]{3})?/);
   const price = priceMatch ? Number(priceMatch[1].replace(",", ".")) : null;
 
+  // Если в фиде есть цена со скидкой (g:sale_price) и она ниже обычной — это акция
+  const saleMatch = (firstTag(raw, "sale_price") ?? "").match(/([\d.,]+)/);
+  const sale = saleMatch ? Number(saleMatch[1].replace(",", ".")) : null;
+  const onSale = price !== null && Number.isFinite(price) && sale !== null && Number.isFinite(sale) && sale > 0 && sale < price;
+
   const categoryPath = (firstTag(raw, "product_type") ?? "")
     .split(">")
     .map((p) => upperFirst(p.trim()))
@@ -111,7 +117,8 @@ export function parseItem(raw: string): FeedItem | null {
     sourceUrl: link.replace(/\?.*$/, ""),
     images: uniqueImages,
     available: (firstTag(raw, "availability") ?? "").toLowerCase() === "in stock",
-    price: price !== null && Number.isFinite(price) ? price : null,
+    price: onSale ? sale : price !== null && Number.isFinite(price) ? price : null,
+    oldPrice: onSale ? price : null,
     currency: priceMatch?.[2] ?? "UAH",
     categoryPath: categoryPath.length ? categoryPath : ["Інше"],
     brand,

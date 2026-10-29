@@ -393,3 +393,64 @@ export function toQuery(lp: ListParams, opts: { withPage?: boolean } = {}): URLS
 export function hasActiveFilters(lp: ListParams): boolean {
   return lp.filters.inStock || lp.filters.brandIds.length > 0 || Object.keys(lp.filters.attrs).length > 0;
 }
+
+
+// ---------- Подборки для главной: акции, хиты, новинки ----------
+
+export type CollectionKind = "sale" | "new" | "hits";
+export const COLLECTION_KINDS: CollectionKind[] = ["sale", "hits", "new"];
+export const COLLECTION_TITLES: Record<CollectionKind, string> = { sale: "Акції", new: "Новинки", hits: "Хіти продажів" };
+export const COLLECTION_DESCRIPTIONS: Record<CollectionKind, string> = {
+  sale: "Товари зі знижкою: стара й нова ціна поруч.",
+  new: "Нові надходження в каталог.",
+  hits: "Найпопулярніші товари нашого магазину.",
+};
+
+const SALES_JOIN = `LEFT JOIN (
+    SELECT i."productId" AS pid, sum(i.quantity)::int AS q FROM "OrderItem" i JOIN "Order" o ON o.id = i."orderId"
+    WHERE o."createdAt" > now() - interval '90 days' AND o.status::text <> 'CANCELLED' GROUP BY i."productId") s ON s.pid = p.id`;
+
+// «Новинка» — отмеченный вручную или добавленный позже первой загрузки каталога (первая массовая загрузка новинками не считается)
+const COLLECTIONS: Record<CollectionKind, { from: string; where: string; order: string }> = {
+  sale: {
+    from: "",
+    where: `(p."oldPrice" > p.price OR 'sale' = ANY(p."homeFlags"))`,
+    order: `CASE WHEN p."oldPrice" > p.price THEN (p."oldPrice" - p.price) / p."oldPrice" ELSE 0 END DESC, p.name ASC, p.id ASC`,
+  },
+  hits: {
+    from: SALES_JOIN,
+    where: `('hit' = ANY(p."homeFlags") OR s.pid IS NOT NULL)`,
+    order: `('hit' = ANY(p."homeFlags")) DESC, s.q DESC NULLS LAST, p."updatedAt" DESC, p.id ASC`,
+  },
+  new: {
+    from: "",
+    where: `('new' = ANY(p."homeFlags") OR p."createdAt" > (SELECT min("createdAt") FROM "Product") + interval '1 day')`,
+    order: `('new' = ANY(p."homeFlags")) DESC, p."createdAt" DESC, p.id ASC`,
+  },
+};
+
+const SHOWABLE = `p."isHidden" = false AND p."isAvailable" = true AND p.price > 0`;
+const CARD_COLS = `p.id, p.name, p.slug, p.price::float8 AS price, p."oldPrice"::float8 AS "oldPrice", p."isAvailable", p."vendorCode",
+       (SELECT i.url FROM "ProductImage" i WHERE i."productId" = p.id ORDER BY i."sortOrder" LIMIT 1) AS image`;
+
+export async function listCollection(run: Run, kind: CollectionKind, page: number, perPage = PER_PAGE): Promise<{ items: ProductCardData[]; total: number }> {
+  const c = COLLECTIONS[kind];
+  const [count, rows] = await Promise.all([
+    run(`SELECT count(*)::int AS n FROM "Product" p ${c.from} WHERE ${SHOWABLE} AND ${c.where}`),
+    run(
+      `SELECT ${CARD_COLS} FROM "Product" p ${c.from} WHERE ${SHOWABLE} AND ${c.where} ORDER BY ${c.order} LIMIT ${perPage} OFFSET ${(Math.max(1, page) - 1) * perPage}`
+    ),
+  ]);
+  return { items: rows as ProductCardData[], total: Number(count[0]?.n ?? 0) };
+}
+
+// Для главной: по несколько товаров с фото в каждом блоке (пустые блоки на главной не показываются)
+export async function getHomeCollections(run: Run, limit = 10): Promise<Record<CollectionKind, ProductCardData[]>> {
+  const hasPhoto = `EXISTS (SELECT 1 FROM "ProductImage" im WHERE im."productId" = p.id)`;
+  const results = await Promise.all(
+    COLLECTION_KINDS.map((k) =>
+      run(`SELECT ${CARD_COLS} FROM "Product" p ${COLLECTIONS[k].from} WHERE ${SHOWABLE} AND ${hasPhoto} AND ${COLLECTIONS[k].where} ORDER BY ${COLLECTIONS[k].order} LIMIT ${limit}`)
+    )
+  );
+  return { sale: results[0] as ProductCardData[], hits: results[1] as ProductCardData[], new: results[2] as ProductCardData[] };
+}

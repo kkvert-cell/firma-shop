@@ -1,6 +1,6 @@
 // Страховка на случай, если новую версию сайта залили раньше, чем выполнили SQL-миграцию:
 // при первой ошибке «нет такой колонки» добавляем недостающие колонки сами (операции безопасные и повторяемые)
-// и повторяем запрос. Файл sql/migration-007-admin-edit.sql делает то же самое вручную.
+// и повторяем запрос. Файлы sql/migration-007-… и 008-… делают то же самое вручную.
 
 import type { Run } from "./catalog";
 
@@ -8,11 +8,12 @@ const STATEMENTS = [
   `ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "isHidden" BOOLEAN NOT NULL DEFAULT false`,
   `ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "lockedFields" TEXT[] NOT NULL DEFAULT '{}'`,
   `ALTER TABLE "Category" ADD COLUMN IF NOT EXISTS "lockedFields" TEXT[] NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "homeFlags" TEXT[] NOT NULL DEFAULT '{}'`,
 ];
 
 const needsMigration = (e: unknown) => {
   const m = e instanceof Error ? e.message : String(e);
-  return /does not exist/i.test(m) && /(isHidden|lockedFields)/.test(m);
+  return /does not exist/i.test(m) && /(isHidden|lockedFields|homeFlags)/.test(m);
 };
 
 let healing: Promise<void> | null = null;

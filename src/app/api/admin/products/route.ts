@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     if (!ID_RE.test(id)) return new NextResponse("Bad request", { status: 400 });
     const cur = (
       await run(
-        `SELECT p.name, p.description, p.price::float8 AS price, p."categoryId", p."externalId", p."stockSyncedAt" IS NOT NULL AS exact,
+        `SELECT p.name, p.description, p.price::float8 AS price, p."oldPrice"::float8 AS "oldPrice", p."categoryId", p."externalId", p."stockSyncedAt" IS NOT NULL AS exact,
                 p."lockedFields", b.name AS brand,
                 COALESCE((SELECT string_agg(i.url, E'\\n' ORDER BY i."sortOrder") FROM "ProductImage" i WHERE i."productId" = p.id), '') AS images
          FROM "Product" p LEFT JOIN "Brand" b ON b.id = p."brandId" WHERE p.id = $1`,
@@ -89,7 +89,8 @@ export async function POST(req: NextRequest) {
       const changed: string[] = [];
       if (name !== norm(cur.name)) changed.push("name");
       if (description !== norm(cur.description)) changed.push("description");
-      if (price !== Number(cur.price)) changed.push("price");
+      // «цена» защищает и обычную, и старую цену (скидку): иначе Prom затёр бы вручную поставленную скидку
+      if (price !== Number(cur.price) || (oldPrice || null) !== (cur.oldPrice ?? null)) changed.push("price");
       if (categoryId !== String(cur.categoryId)) changed.push("category");
       if (brandName !== norm(cur.brand)) changed.push("brand");
       if (images.join("\n") !== norm(cur.images)) changed.push("images");
@@ -104,10 +105,11 @@ export async function POST(req: NextRequest) {
                 "brandId" = CASE WHEN $7::boolean THEN $8 ELSE "brandId" END,
                 "vendorCode" = $9, "isHidden" = $10, "seoTitle" = $11, "seoDescription" = $12,
                 "isAvailable" = CASE WHEN "stockSyncedAt" IS NULL THEN $13 ELSE "isAvailable" END,
-                "lockedFields" = $14::text[], "updatedAt" = now()
+                "lockedFields" = $14::text[], "homeFlags" = $15::text[], "updatedAt" = now()
          WHERE id = $1`,
-        [id, name, description || null, price, oldPrice, categoryId, changed.includes("brand"), brandId ?? null, oneLine(f.get("vendorCode"), 40) || null,
-         !visible, oneLine(f.get("seoTitle"), 200) || null, oneLine(f.get("seoDescription"), 400) || null, manualAvail, locks]
+        [id, name, description || null, price, oldPrice || null, categoryId, changed.includes("brand"), brandId ?? null, oneLine(f.get("vendorCode"), 40) || null,
+         !visible, oneLine(f.get("seoTitle"), 200) || null, oneLine(f.get("seoDescription"), 400) || null, manualAvail, locks,
+         (["hit", "new", "sale"] as const).filter((k) => f.get(`flag_${k}`) === "on")]
       );
       if (changed.includes("images")) await setImages(run, id, images);
       return go(req, back, "ok=saved");
