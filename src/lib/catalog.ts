@@ -3,12 +3,13 @@
 // напрямую — так их можно проверять на любой Postgres, не только на Neon.
 
 import { cache } from "react";
+import { healRun } from "./schema-heal";
 import { getSql } from "./db";
 
 export type Row = Record<string, unknown>;
 export type Run = (query: string, params?: unknown[]) => Promise<Row[]>;
 
-export const getRunner = (): Run => getSql() as unknown as Run;
+export const getRunner = (): Run => healRun(getSql() as unknown as Run);
 
 // ---------- Типы ----------
 
@@ -117,8 +118,8 @@ export async function getSubcategories(run: Run, parentId: string): Promise<SubC
   const rows = await run(
     `SELECT c.id, c.name, c.slug, count(p.id)::int AS n
      FROM "Category" c
-     LEFT JOIN "Category" d ON d.path = c.path OR left(d.path, length(c.path) + 3) = c.path || ' > '
-     LEFT JOIN "Product" p ON p."categoryId" = d.id
+     LEFT JOIN "Category" d ON (d.path = c.path OR left(d.path, length(c.path) + 3) = c.path || ' > ') AND d."isActive" = true
+     LEFT JOIN "Product" p ON p."categoryId" = d.id AND p."isHidden" = false
      WHERE c."parentId" = $1 AND c."isActive" = true
      GROUP BY c.id, c.name, c.slug, c."sortOrder"
      ORDER BY c."sortOrder", c.name`,
@@ -159,15 +160,15 @@ function baseWhere(scope: Scope, params: unknown[]): { cte: string; where: strin
       cte: `WITH RECURSIVE tree AS (
               SELECT id FROM "Category" WHERE id = $${n}
               UNION ALL
-              SELECT c.id FROM "Category" c JOIN tree t ON c."parentId" = t.id)`,
-      where: [`p."categoryId" IN (SELECT id FROM tree)`],
+              SELECT c.id FROM "Category" c JOIN tree t ON c."parentId" = t.id WHERE c."isActive" = true)`,
+      where: [`p."categoryId" IN (SELECT id FROM tree)`, `p."isHidden" = false`],
     };
   }
-  const where = scope.tokens.map((t) => {
+  const where = [`p."isHidden" = false`, ...scope.tokens.map((t) => {
     params.push(`%${escapeLike(t)}%`);
     const n = params.length;
     return `(p.name ILIKE $${n} OR p."vendorCode" ILIKE $${n} OR p.sku ILIKE $${n})`;
-  });
+  })];
   return { cte: "", where };
 }
 
@@ -322,7 +323,7 @@ export async function getProductBySlug(run: Run, slug: string) {
      FROM "Product" p
      JOIN "Category" c ON c.id = p."categoryId"
      LEFT JOIN "Brand" b ON b.id = p."brandId"
-     WHERE p.slug = $1 LIMIT 1`,
+     WHERE p.slug = $1 AND p."isHidden" = false LIMIT 1`,
     [slug]
   );
   const product = rows[0] as ProductFull | undefined;
@@ -343,7 +344,7 @@ export async function getProductBySlug(run: Run, slug: string) {
               p."isAvailable", p."vendorCode",
               (SELECT i.url FROM "ProductImage" i WHERE i."productId" = p.id ORDER BY i."sortOrder" LIMIT 1) AS image
        FROM "Product" p
-       WHERE p."categoryId" = $1 AND p.id <> $2 AND p."isAvailable" = true
+       WHERE p."categoryId" = $1 AND p.id <> $2 AND p."isAvailable" = true AND p."isHidden" = false
        ORDER BY random() LIMIT 4`,
       [product.categoryId, product.id]
     ),
@@ -364,7 +365,7 @@ export async function getProductBySlug(run: Run, slug: string) {
 export async function getSitemapData(run: Run) {
   const [cats, prods] = await Promise.all([
     run(`SELECT slug FROM "Category" WHERE "isActive" = true AND path IS NOT NULL ORDER BY path`),
-    run(`SELECT slug, "updatedAt" FROM "Product" ORDER BY id`),
+    run(`SELECT slug, "updatedAt" FROM "Product" WHERE "isHidden" = false ORDER BY id`),
   ]);
   return {
     categories: cats.map((r) => String(r.slug)),

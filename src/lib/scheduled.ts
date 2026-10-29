@@ -9,6 +9,7 @@ import { linkArticles } from "./prom-articles";
 import { retryPendingOrders } from "./keycrm-orders";
 import { getState, setState } from "./sync-state";
 import { promRefreshStep } from "./prom-refresh";
+import { healRun } from "./schema-heal";
 
 // Другий розклад: оновлення каталогу з Prom (окремим запуском, щоб не ділити ліміти із залишками й замовленнями).
 // Той самий рядок має стояти в wrangler.json → triggers.crons.
@@ -18,7 +19,7 @@ export async function runPromRefresh(now: Date = new Date()) {
   const feedUrl = process.env.PROM_FEED_URL;
   if (!feedUrl) return;
   try {
-    const r = await promRefreshStep(getSql() as unknown as Run, feedUrl, now, Number(process.env.PROM_REFRESH_HOURS) || 12);
+    const r = await promRefreshStep(healRun(getSql() as unknown as Run), feedUrl, now, Number(process.env.PROM_REFRESH_HOURS) || 12);
     if (r.status !== "idle") console.log("[cron] Каталог Prom:", JSON.stringify(r));
   } catch (err) {
     console.error("[cron] Помилка оновлення каталогу Prom:", err);

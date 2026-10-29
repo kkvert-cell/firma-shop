@@ -34,7 +34,9 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
       `INSERT INTO "Category"("name","slug","path","parentId","isActive")
        SELECT x.name, x.slug, x.path, (SELECT c.id FROM "Category" c WHERE c.path = x."parentPath"), true
        FROM jsonb_to_recordset($1::jsonb) AS x(name text, slug text, path text, "parentPath" text)
-       ON CONFLICT (path) DO UPDATE SET "name" = EXCLUDED."name", "isActive" = true`,
+       ON CONFLICT (path) DO UPDATE SET
+         "name" = CASE WHEN 'name' = ANY("Category"."lockedFields") THEN "Category"."name" ELSE EXCLUDED."name" END,
+         "isActive" = CASE WHEN 'visibility' = ANY("Category"."lockedFields") THEN "Category"."isActive" ELSE true END`,
       [j(rows)]
     );
   }
@@ -108,9 +110,13 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
      FROM jsonb_to_recordset($1::jsonb) AS x("externalId" text, "vendorCode" text, slug text, name text, description text,
           "categoryPath" text, "brandSlug" text, price numeric, currency text, available boolean, "sourceUrl" text)
      ON CONFLICT ("externalId") DO UPDATE SET
-       slug = EXCLUDED.slug, name = EXCLUDED.name, description = EXCLUDED.description,
+       slug = EXCLUDED.slug,
+       name = CASE WHEN 'name' = ANY("Product"."lockedFields") THEN "Product".name ELSE EXCLUDED.name END,
+       description = CASE WHEN 'description' = ANY("Product"."lockedFields") THEN "Product".description ELSE EXCLUDED.description END,
        "vendorCode" = COALESCE("Product"."vendorCode", EXCLUDED."vendorCode"),
-       "categoryId" = EXCLUDED."categoryId", "brandId" = EXCLUDED."brandId", price = EXCLUDED.price,
+       "categoryId" = CASE WHEN 'category' = ANY("Product"."lockedFields") THEN "Product"."categoryId" ELSE EXCLUDED."categoryId" END,
+       "brandId" = CASE WHEN 'brand' = ANY("Product"."lockedFields") THEN "Product"."brandId" ELSE EXCLUDED."brandId" END,
+       price = CASE WHEN 'price' = ANY("Product"."lockedFields") THEN "Product".price ELSE EXCLUDED.price END,
        currency = EXCLUDED.currency,
        "isAvailable" = CASE WHEN "Product"."stockSyncedAt" IS NOT NULL THEN "Product"."isAvailable" ELSE EXCLUDED."isAvailable" END,
        "sourceUrl" = EXCLUDED."sourceUrl",
@@ -122,14 +128,15 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
   const ids = items.map((i) => i.externalId);
   const imageRows = items.flatMap((it) => it.images.map((url, ord) => ({ externalId: it.externalId, url, ord })));
   await sql(
-    `DELETE FROM "ProductImage" WHERE "productId" IN (SELECT id FROM "Product" WHERE "externalId" = ANY($1::text[]))`,
+    `DELETE FROM "ProductImage" WHERE "productId" IN
+       (SELECT id FROM "Product" WHERE "externalId" = ANY($1::text[]) AND NOT ('images' = ANY("lockedFields")))`,
     [ids]
   );
   if (imageRows.length) {
     await sql(
       `INSERT INTO "ProductImage"("productId","url","sortOrder")
        SELECT p.id, i.url, i.ord FROM jsonb_to_recordset($1::jsonb) AS i("externalId" text, url text, ord int)
-       JOIN "Product" p ON p."externalId" = i."externalId"`,
+       JOIN "Product" p ON p."externalId" = i."externalId" AND NOT ('images' = ANY(p."lockedFields"))`,
       [j(imageRows)]
     );
   }

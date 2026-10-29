@@ -115,7 +115,7 @@ export async function createOrder(run: Run, input: OrderInput): Promise<OrderRes
 
   const found = await run(
     `SELECT id, name, price::float8 AS price, "isAvailable", "stockQty", ("stockSyncedAt" IS NOT NULL) AS exact, "vendorCode"
-     FROM "Product" WHERE id = ANY($1::text[])`,
+     FROM "Product" WHERE id = ANY($1::text[]) AND "isHidden" = false`,
     [input.items.map((i) => i.id)]
   );
   const byId = new Map(found.map((r) => [String(r.id), r]));

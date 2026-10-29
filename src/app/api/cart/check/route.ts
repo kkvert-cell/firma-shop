@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
       `SELECT p.id, p.name, p.slug, p.price::float8 AS price, p."oldPrice"::float8 AS "oldPrice", p."isAvailable",
               p."stockQty", (p."stockSyncedAt" IS NOT NULL) AS "stockExact",
               (SELECT i.url FROM "ProductImage" i WHERE i."productId" = p.id ORDER BY i."sortOrder" LIMIT 1) AS image
-       FROM "Product" p WHERE p.id = ANY($1::text[])`,
+       FROM "Product" p WHERE p.id = ANY($1::text[]) AND p."isHidden" = false`,
       [ids]
     );
     return NextResponse.json({ items: rows });
