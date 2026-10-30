@@ -552,3 +552,19 @@ a.btn-primary:hover { text-decoration: none; }
 @media (min-width: 720px) { .product-row > .product-card { flex-basis: 200px; } }
 .adm-flags { border: var(--border-hairline); border-radius: var(--radius); padding: var(--space-3, 12px); display: grid; gap: var(--space-2, 8px); }
 .adm-flags legend { padding: 0 6px; font-weight: 600; }
+
+/* Подсказки поиска */
+.search-wrap { position: relative; }
+.search-form { flex: 1; display: flex; gap: var(--space-2); min-width: 0; }
+.search-form input { flex: 1; min-width: 0; }
+.suggest-list { position: absolute; top: 100%; left: 0; right: 0; z-index: 60; margin: 4px 0 0; padding: 4px; list-style: none; max-height: 70vh; overflow-y: auto; background: var(--color-bg-raised); border: var(--border-hairline); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14); }
+.suggest-item { display: flex; align-items: center; gap: var(--space-3, 12px); padding: 8px; border-radius: 6px; color: var(--color-ink); text-decoration: none; }
+.suggest-item:hover, .suggest-item.active { background: rgba(0, 0, 0, 0.06); }
+.suggest-item img, .suggest-noimg { width: 40px; height: 40px; flex: none; object-fit: contain; border-radius: 4px; background: rgba(0, 0, 0, 0.05); }
+.suggest-text { display: grid; gap: 2px; min-width: 0; }
+.suggest-name { font-size: var(--text-sm); line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.suggest-sub { font-size: var(--text-xs, 12px); color: var(--color-ink-muted); }
+.suggest-old { opacity: 0.8; }
+.suggest-category .suggest-name { font-weight: 600; }
+.suggest-all { justify-content: center; font-weight: 600; color: var(--color-link, #1f4d7a); }
+.suggest-hint { padding: 12px; font-size: var(--text-sm); color: var(--color-ink-muted); }

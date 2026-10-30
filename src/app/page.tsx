@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSql } from "@/lib/db";
 import ProductCard from "@/components/ProductCard";
+import SearchBox from "@/components/SearchBox";
 import { COLLECTION_KINDS, COLLECTION_TITLES, getHomeCollections, getRunner, type CollectionKind } from "@/lib/catalog";
 
 // force-dynamic: страница не запекается статикой при сборке (тогда список
@@ -47,15 +48,7 @@ export default async function HomePage() {
           Понад 1000 товарів: вимірювальний та ручний інструмент, електроніка, аксесуари.
         </p>
 
-        <form action="/search" className="search-bar" role="search">
-          <input
-            type="text"
-            name="q"
-            placeholder="Наприклад: штангенциркуль 150 мм"
-            aria-label="Пошук товарів"
-          />
-          <button type="submit" className="btn-primary">Знайти</button>
-        </form>
+        <SearchBox className="search-bar" placeholder="Наприклад: штангенциркуль 150 мм" />
       </section>
 
       <div className="tick-divider" style={{ margin: "var(--space-8) 0" }} />
