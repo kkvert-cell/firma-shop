@@ -11,6 +11,7 @@
     "deploy": "opennextjs-cloudflare build && wrangler deploy"
   },
   "dependencies": {
+    "@fontsource-variable/manrope": "^5.3.0",
     "@neondatabase/serverless": "0.10.4",
     "next": "16.3.8",
     "react": "19.0.0",

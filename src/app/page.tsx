@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { getSql } from "@/lib/db";
 import ProductCard from "@/components/ProductCard";
 import SearchBox from "@/components/SearchBox";
+import CategoryIcon from "@/components/CategoryIcon";
 import { COLLECTION_KINDS, COLLECTION_TITLES, getHomeCollections, getRunner, type CollectionKind } from "@/lib/catalog";
 
 // force-dynamic: страница не запекается статикой при сборке (тогда список
@@ -11,12 +11,14 @@ export const dynamic = "force-dynamic";
 
 async function loadCategories() {
   try {
-    const sql = getSql();
-    const rows = (await sql`
-      SELECT id, name, slug FROM "Category"
-      WHERE "isActive" = true AND "parentId" IS NULL
-      ORDER BY "sortOrder" ASC
-    `) as { id: string; name: string; slug: string }[];
+    // Показываем только категории, в которых (в том числе в подкатегориях) есть видимые товары: пустые на витрине не нужны
+    const rows = (await getRunner()(
+      `SELECT c.id, c.name, c.slug FROM "Category" c
+       WHERE c."isActive" = true AND c."parentId" IS NULL
+         AND EXISTS (SELECT 1 FROM "Category" d JOIN "Product" p ON p."categoryId" = d.id
+                     WHERE (d.path = c.path OR left(d.path, length(c.path) + 3) = c.path || ' > ') AND d."isActive" = true AND p."isHidden" = false)
+       ORDER BY c."sortOrder" ASC`
+    )) as unknown as { id: string; name: string; slug: string }[];
     return { categories: rows, error: null as string | null };
   } catch (err) {
     // Если база временно недоступна — сайт всё равно открывается,
@@ -71,7 +73,8 @@ export default async function HomePage() {
           )}
           {categories.map((cat) => (
             <Link key={cat.slug} href={`/catalog/${cat.slug}`} className="card category-card">
-              {cat.name}
+              <span className="category-icon"><CategoryIcon name={cat.name} /></span>
+              <span>{cat.name}</span>
             </Link>
           ))}
         </div>

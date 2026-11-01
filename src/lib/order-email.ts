@@ -27,7 +27,7 @@ export async function sendOrderEmail(run: Run, orderNumber: string): Promise<boo
     .map((i) => `<tr><td style="padding:4px 12px 4px 0">${esc(i.name)}</td><td style="padding:4px 12px 4px 0;white-space:nowrap">${Number(i.quantity)} × ${formatPrice(Number(i.price))} ₴</td></tr>`)
     .join("");
   const html = `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#222;max-width:560px">
-<h2 style="margin:0 0 12px">Дякуємо за замовлення ${esc(orderNumber)}!</h2>
+<h2 style="margin:0 0 12px;color:#133249">Дякуємо за замовлення ${esc(orderNumber)}!</h2>
 <p>Вітаємо, ${esc(o.firstName)}! ${paid ? "Оплату отримано, замовлення передано в обробку." : "Ми отримали ваше замовлення, менеджер зв'яжеться з вами для підтвердження."}</p>
 <table style="border-collapse:collapse;margin:12px 0">${lines}</table>
 <p><b>Разом: ${formatPrice(Number(o.total))} ₴</b> (без вартості доставки)</p>

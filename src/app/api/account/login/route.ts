@@ -26,9 +26,9 @@ export async function POST(req: NextRequest) {
           email,
           `Вхід у кабінет — ${SITE_NAME}`,
           `<div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.5;color:#222;max-width:520px">
-<h2 style="margin:0 0 12px">Вхід у особистий кабінет</h2>
+<h2 style="margin:0 0 12px;color:#133249">Вхід у особистий кабінет</h2>
 <p>Натисніть кнопку, щоб увійти. Посилання діє 15 хвилин.</p>
-<p><a href="${link}" style="display:inline-block;padding:10px 18px;background:#1f4d7a;color:#fff;text-decoration:none;border-radius:6px">Увійти в кабінет</a></p>
+<p><a href="${link}" style="display:inline-block;padding:10px 18px;background:#133249;color:#fff;text-decoration:none;border-radius:6px">Увійти в кабінет</a></p>
 <p style="color:#666">Якщо ви не запитували вхід, просто проігноруйте цей лист. ${SITE_NAME}, ${SHOP_PHONE_TEXT}</p></div>`
         );
       }

@@ -133,6 +133,8 @@ export async function getTopCategoriesWithChildren(run: Run) {
     `SELECT c.id, c.name, c.slug, c."parentId"
      FROM "Category" c WHERE c."isActive" = true AND c.path IS NOT NULL
        AND (c."parentId" IS NULL OR c."parentId" IN (SELECT id FROM "Category" WHERE "parentId" IS NULL))
+       AND EXISTS (SELECT 1 FROM "Category" d JOIN "Product" p ON p."categoryId" = d.id
+                   WHERE (d.path = c.path OR left(d.path, length(c.path) + 3) = c.path || ' > ') AND d."isActive" = true AND p."isHidden" = false)
      ORDER BY c."sortOrder", c.name`
   );
   const tops = rows.filter((r) => r.parentId === null);

@@ -32,7 +32,7 @@ export default async function AdminCategories({ searchParams }: { searchParams: 
         </form>
       </section>
 
-      <p className="muted small">Усього категорій: {cats.length}. Натисніть на категорію, щоб змінити назву й опис, приховати чи видалити її.</p>
+      <p className="muted small">Усього категорій: {cats.length}. Натисніть на категорію, щоб змінити назву й опис, приховати чи видалити її. Порожні категорії (без товарів) на сайті не показуються, поки в них нічого немає.</p>
       <ul className="adm-list">
         {cats.map((c) => (
           <li key={c.id}>

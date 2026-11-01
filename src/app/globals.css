@@ -1,32 +1,37 @@
 /* ============================================================================
-   Дизайн-система — интернет-магазин "Firma"
-   Визуальный язык: measurement / precision (шкала измерительного инструмента
-   как структурный приём — тонкие деления-разделители, не декор).
-   Шрифты: IBM Plex Sans (текст), IBM Plex Sans Condensed (заголовки),
-   IBM Plex Mono (только реальные данные: артикул, цена, характеристики).
+   Дизайн-система — интернет-магазин "Firma Vymir"  ·  вариант B «Сучасний»
+   Палитра берётся из логотипа: тёмно-синий (штангенциркуль) и серебристый.
+   Шрифт: Manrope (хранится на самом сайте, без обращения к внешним сервисам).
+   Знаковый приём: деления измерительной шкалы как тонкие разделители.
    ============================================================================ */
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
-
 :root {
+  color-scheme: light;
+
   /* Цвет */
-  --color-bg:        #F4F5F3;
+  --color-bg:        #FFFFFF;
   --color-bg-raised: #FFFFFF;
-  --color-ink:        #181B1F;
-  --color-ink-muted:  #5A6570;
-  --color-border:     #DBDEE0;
+  --color-tint:      #EEF1F5; /* плитки, карточки */
+  --color-tint-2:    #E1E6EC;
+  --color-ink:        #0F2335;
+  --color-ink-muted:  #5A6B7B;
+  --color-border:     #D5DBE3;
 
-  --color-accent:        #2C5C8A; /* стальной синий — основной */
-  --color-accent-hover:  #234A70;
-  --color-mark:           #E8922E; /* калибровочная отметка — знижки, бейджи */
+  --color-navy:          #133249; /* из логотипа */
+  --color-accent:        #133249; /* основной: кнопки */
+  --color-accent-hover:  #0B2234;
+  --color-link:          #1F5C8F; /* ссылки в тексте */
+  --color-silver:        #9FA6AC; /* из логотипа */
+  --gradient-silver:     linear-gradient(90deg, #A3AAB0 0%, #D9DDE1 55%, #9AA1A8 100%);
+  --color-mark:           #C62828; /* скидки */
 
-  --color-success: #2F7A52;
+  --color-success: #12703F;
   --color-error:   #C0402E;
 
   /* Типографика */
-  --font-body:      'IBM Plex Sans', system-ui, sans-serif;
-  --font-heading:   'IBM Plex Sans Condensed', system-ui, sans-serif;
-  --font-data:      'IBM Plex Mono', ui-monospace, monospace; /* SKU, цена, характеристики */
+  --font-body:      'Manrope Variable', 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-heading:   'Manrope Variable', 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-data:      'Manrope Variable', 'Manrope', system-ui, sans-serif; /* цены, артикулы */
 
   --text-xs:   0.75rem;
   --text-sm:   0.875rem;
@@ -36,8 +41,9 @@
   --text-2xl:  1.75rem;
   --text-3xl:  2.25rem;
 
-  /*層Layout */
-  --radius: 4px;
+  /* Форма */
+  --radius: 14px;
+  --radius-sm: 10px;
   --border-hairline: 1px solid var(--color-border);
   --max-line: 72ch;
 
@@ -48,27 +54,6 @@
   --space-6: 24px;
   --space-8: 32px;
   --space-12: 48px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --color-bg:        #14171A;
-    --color-bg-raised: #1C2024;
-    --color-ink:        #EDEFF0;
-    --color-ink-muted:  #9AA3AB;
-    --color-border:     #2C3136;
-    --color-accent:      #5B8FC7;
-    --color-accent-hover:#7BA6D6;
-  }
-}
-:root[data-theme="dark"] {
-  --color-bg:        #14171A;
-  --color-bg-raised: #1C2024;
-  --color-ink:        #EDEFF0;
-  --color-ink-muted:  #9AA3AB;
-  --color-border:     #2C3136;
-  --color-accent:      #5B8FC7;
-  --color-accent-hover:#7BA6D6;
 }
 
 body {
@@ -568,3 +553,83 @@ a.btn-primary:hover { text-decoration: none; }
 .suggest-category .suggest-name { font-weight: 600; }
 .suggest-all { justify-content: center; font-weight: 600; color: var(--color-link, #1f4d7a); }
 .suggest-hint { padding: 12px; font-size: var(--text-sm); color: var(--color-ink-muted); }
+
+/* ============================================================================
+   Вариант B «Сучасний» — слой оформления поверх базовых стилей
+   ============================================================================ */
+
+:focus-visible { outline: 2px solid var(--color-link); outline-offset: 2px; }
+a { color: var(--color-link); }
+.muted { color: var(--color-ink-muted); }
+
+h1, h2, h3, .heading { font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; }
+.page-title { font-size: clamp(1.5rem, 4.5vw, 2rem); }
+.section-title { font-weight: 800; }
+.data, .sku, .price, .product-card-sku, .n { font-variant-numeric: tabular-nums; }
+
+/* поля и кнопки */
+button, input, select, textarea { border-radius: var(--radius-sm); border-color: var(--color-border); }
+input:not([type="checkbox"]):not([type="radio"]), select, textarea { padding: 11px 14px; min-height: 44px; border-radius: var(--radius); }
+textarea { min-height: 0; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { border-color: var(--color-link); outline-offset: 0; }
+.btn-primary { font-weight: 700; padding: 11px 18px; min-height: 44px; border-radius: var(--radius); }
+.btn-secondary { font-weight: 600; border-radius: var(--radius); }
+.card { border-radius: 16px; }
+
+/* шапка */
+.site-header { background: #fff; border-bottom: var(--border-hairline); }
+.site-header::after { content: ""; display: block; height: 3px; background: var(--gradient-silver); }
+.brand { display: inline-flex; align-items: center; gap: 10px; color: var(--color-navy); flex: none; }
+.brand:hover { text-decoration: none; }
+.brand img { display: block; width: 36px; height: 36px; object-fit: contain; }
+.brand-text { display: grid; line-height: 1; gap: 3px; }
+.brand-text small { font-size: 9px; font-weight: 800; letter-spacing: 0.34em; padding-left: 1px; }
+.brand-text b { font-size: 21px; font-weight: 800; letter-spacing: 0.01em; }
+.header-link { font-weight: 600; }
+.header-link:hover { text-decoration: none; color: var(--color-link); }
+.cart-link { background: var(--color-accent); color: #fff; border-radius: 999px; padding: 8px 14px; }
+.cart-link:hover { background: var(--color-accent-hover); color: #fff; }
+.cart-badge { background: #fff; color: var(--color-navy); min-width: 20px; padding: 0 6px; border-radius: 999px; font-size: var(--text-xs); font-weight: 800; text-align: center; }
+
+/* главная */
+.hero { padding: var(--space-6) 0 var(--space-3); }
+.hero h1 { font-size: clamp(2rem, 7vw, 3.25rem); line-height: 1.06; max-width: 22ch; }
+.hero p { color: var(--color-ink-muted); font-size: var(--text-lg); max-width: 52ch; }
+.tick-divider { background: repeating-linear-gradient(90deg, var(--color-silver) 0 1px, transparent 1px 12px); opacity: 0.6; }
+
+.category-grid { grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
+@media (min-width: 720px) { .category-grid { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); } }
+.category-card { display: flex; align-items: center; gap: var(--space-3); padding: 12px; min-height: 60px; background: var(--color-tint); border: 0; border-radius: 16px; font-weight: 700; font-size: 0.95rem; line-height: 1.2; }
+.category-card:hover { background: var(--color-tint-2); }
+.category-icon { flex: none; width: 40px; height: 40px; display: grid; place-items: center; background: #fff; border-radius: 12px; color: var(--color-link); }
+
+.trust-bar > div { background: var(--color-tint); border-radius: 16px; padding: var(--space-4); border-left: 4px solid var(--color-silver); }
+
+/* карточки товаров */
+.product-card { background: var(--color-tint); border: 0; border-radius: 16px; padding: 10px; transition: box-shadow 0.15s, transform 0.15s; }
+.product-card:hover { box-shadow: 0 8px 22px rgba(19, 50, 73, 0.14); transform: translateY(-1px); }
+.product-card-img { background: #fff; border-radius: 12px; }
+.product-card-title { font-weight: 600; font-size: var(--text-sm); }
+.price { font-weight: 800; }
+.stock-in { font-weight: 600; }
+.discount-badge { background: var(--color-mark); }
+.product-row > .product-card { flex-basis: 172px; }
+
+/* кнопки-«таблетки» в каталоге */
+.chip { border-radius: 999px; background: var(--color-tint); border: 0; font-weight: 600; }
+.chip:hover { background: var(--color-tint-2); }
+.chip-active { background: var(--color-accent); color: #fff; }
+.chip-active:hover { background: var(--color-accent-hover); }
+
+/* подвал */
+.site-footer { position: relative; margin-top: var(--space-8); background: var(--color-tint); border-top: 0; }
+.site-footer::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--gradient-silver); }
+.footer-brand { display: inline-flex; align-items: center; gap: 8px; margin-bottom: var(--space-3); color: var(--color-navy); }
+.footer-brand img { width: 28px; height: 28px; object-fit: contain; }
+.footer-brand .brand-text b { font-size: 17px; }
+.footer-brand .brand-text small { font-size: 8px; }
+
+/* подсказки поиска и админка наследуют тот же стиль */
+.suggest-list { border-radius: 16px; }
+.adm-nav { background: var(--color-tint); }
+.adm-nav a { color: var(--color-navy); }
