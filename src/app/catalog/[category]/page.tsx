@@ -1,3 +1,4 @@
+import RichText from "@/components/RichText";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -212,7 +213,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
           <Pagination basePath={basePath} query={pageQuery} page={lp.page} total={list.total} perPage={PER_PAGE} />
 
-          {cat.description && <div className="seo-text">{cat.description}</div>}
+          {cat.description && <RichText text={cat.description} className="seo-text" />}
         </section>
       </div>
     </main>

@@ -5,6 +5,7 @@ import Breadcrumbs from "@/components/Breadcrumbs";
 import ProductCard from "@/components/ProductCard";
 import ProductGallery from "@/components/ProductGallery";
 import Icon from "@/components/Icon";
+import RichText from "@/components/RichText";
 import AddToCart from "@/components/AddToCart";
 import { SITE_URL, SHOP_PHONE, SHOP_PHONE_TEXT, formatPrice } from "@/lib/site";
 import { jsonLd, productJsonLd, productMetadata, breadcrumbJsonLd } from "@/lib/seo";
@@ -136,7 +137,7 @@ export default async function ProductPage({ params }: Props) {
       {p.description && (
         <section className="pdp-description">
           <h2 className="heading section-title">Опис</h2>
-          <p>{p.description}</p>
+          <RichText text={p.description} />
         </section>
       )}
 

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { apiAdminOk } from "@/lib/admin-auth";
 import { getRunner } from "@/lib/catalog";
 import { slugify } from "@/lib/prom-feed";
+import { normalizeDescription } from "@/lib/text-format";
 import { ID_RE, PRODUCT_LOCKS, addLocks, oneLine, parseImages, parsePrice, rid, text, uniqueSlug } from "@/lib/admin-catalog";
 
 export const dynamic = "force-dynamic";
@@ -88,7 +89,7 @@ export async function POST(req: NextRequest) {
       const norm = (s: unknown) => String(s ?? "").replace(/\r\n/g, "\n").trim();
       const changed: string[] = [];
       if (name !== norm(cur.name)) changed.push("name");
-      if (description !== norm(cur.description)) changed.push("description");
+      if (description !== normalizeDescription(String(cur.description ?? ""))) changed.push("description");
       // «цена» защищает и обычную, и старую цену (скидку): иначе Prom затёр бы вручную поставленную скидку
       if (price !== Number(cur.price) || (oldPrice || null) !== (cur.oldPrice ?? null)) changed.push("price");
       if (categoryId !== String(cur.categoryId)) changed.push("category");

@@ -2,6 +2,8 @@
 // Регулярные выражения вместо XML-парсера: файл большой, структура простая,
 // а в Cloudflare Workers нет браузерного DOMParser.
 
+import { normalizeDescription } from "./text-format";
+
 export type FeedItem = {
   externalId: string; // id товара на Проме
   slug: string; // p1322527284-vysechnye-nozhnitsy-metallu (как в старых ссылках Прома)
@@ -113,7 +115,7 @@ export function parseItem(raw: string): FeedItem | null {
     externalId,
     slug,
     name,
-    description: firstTag(raw, "description") ?? "",
+    description: normalizeDescription(firstTag(raw, "description") ?? ""),
     sourceUrl: link.replace(/\?.*$/, ""),
     images: uniqueImages,
     available: (firstTag(raw, "availability") ?? "").toLowerCase() === "in stock",

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getRunner } from "@/lib/catalog";
+import { normalizeDescription } from "@/lib/text-format";
 import { LOCK_LABEL, PRODUCT_LOCKS, allCategories, catLabel, ID_RE } from "@/lib/admin-catalog";
 import { thumb } from "@/lib/image";
 
@@ -51,7 +52,9 @@ export default async function AdminProduct({ params, searchParams }: { params: P
         <input type="hidden" name="op" value="save" />
         <input type="hidden" name="id" value={String(p.id)} />
         <label>Назва<input name="name" defaultValue={String(p.name)} maxLength={250} required /></label>
-        <label>Опис<textarea name="description" rows={9} defaultValue={String(p.description ?? "")} maxLength={20000} /></label>
+        <label>Опис<textarea name="description" rows={9} defaultValue={normalizeDescription(String(p.description ?? ""))} maxLength={20000} />
+          <span className="muted small">Порожній рядок — новий абзац. Рядки, що починаються з «- », — список. Три й більше рядки «Назва: значення» поспіль — таблиця характеристик. Короткий рядок із двокрапкою в кінці — підзаголовок.</span>
+        </label>
         <div className="adm-two">
           <label>Ціна, ₴<input name="price" inputMode="decimal" defaultValue={String(p.price)} required /></label>
           <label>Стара ціна, ₴ (для знижки)<input name="oldPrice" inputMode="decimal" defaultValue={p.oldPrice ? String(p.oldPrice) : ""} /></label>

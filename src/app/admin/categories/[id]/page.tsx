@@ -45,7 +45,9 @@ export default async function AdminCategory({ params, searchParams }: { params: 
       <form action="/api/admin/categories" method="post" className="checkout-form adm-form">
         <input type="hidden" name="op" value="save" /><input type="hidden" name="id" value={String(c.id)} />
         <label>Назва<input name="name" defaultValue={String(c.name)} maxLength={80} required /></label>
-        <label>Опис категорії (показується на сайті для покупців і Google)<textarea name="description" rows={6} defaultValue={String(c.description ?? "")} maxLength={20000} /></label>
+        <label>Опис категорії (показується на сайті для покупців і Google)<textarea name="description" rows={6} defaultValue={String(c.description ?? "")} maxLength={20000} />
+          <span className="muted small">Порожній рядок — новий абзац; рядки з «- » на початку — список.</span>
+        </label>
         <label>SEO: заголовок сторінки<input name="seoTitle" defaultValue={String(c.seoTitle ?? "")} maxLength={200} /></label>
         <label>SEO: короткий опис для Google<textarea name="seoDescription" rows={2} defaultValue={String(c.seoDescription ?? "")} maxLength={400} /></label>
         <label>Порядок у меню (менше число — вище)<input name="sortOrder" inputMode="numeric" defaultValue={String(c.sortOrder ?? 0)} /></label>
