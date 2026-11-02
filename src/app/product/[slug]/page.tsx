@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import ProductCard from "@/components/ProductCard";
 import ProductGallery from "@/components/ProductGallery";
+import Icon from "@/components/Icon";
 import AddToCart from "@/components/AddToCart";
 import { SITE_URL, SHOP_PHONE, SHOP_PHONE_TEXT, formatPrice } from "@/lib/site";
 import { jsonLd, productJsonLd, productMetadata, breadcrumbJsonLd } from "@/lib/seo";
@@ -106,8 +107,12 @@ export default async function ProductPage({ params }: Props) {
                 maxQty: p.stockExact && p.stockQty > 0 ? p.stockQty : 99,
               }}
             />
-            <p className="muted">Доставка Новою поштою або Укрпоштою по всій Україні. Оплата при отриманні або за реквізитами.</p>
-            <p className="muted">Потрібна консультація? <a href={`tel:${SHOP_PHONE}`} className="data">{SHOP_PHONE_TEXT}</a></p>
+            <ul className="benefits">
+              <li><Icon name="truck" /><span><b>Доставка по Україні</b>Нова пошта або Укрпошта</span></li>
+              <li><Icon name="card" /><span><b>Оплата</b>При отриманні або за реквізитами</span></li>
+              <li><Icon name="return" /><span><b>Повернення</b>14 днів за законом</span></li>
+              <li><Icon name="phone" /><span><b>Консультація</b><a href={`tel:${SHOP_PHONE}`} className="data">{SHOP_PHONE_TEXT}</a></span></li>
+            </ul>
           </div>
 
           {attrs.length > 0 && (
