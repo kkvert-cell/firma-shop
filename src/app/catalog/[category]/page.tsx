@@ -6,7 +6,7 @@ import Breadcrumbs from "@/components/Breadcrumbs";
 import ProductCard from "@/components/ProductCard";
 import Pagination from "@/components/Pagination";
 import FilterPanel from "@/components/FilterPanel";
-import { SITE_URL, SITE_NAME, plural } from "@/lib/site";
+import { SITE_URL, SITE_NAME, formatPrice, plural } from "@/lib/site";
 import { jsonLd, breadcrumbJsonLd } from "@/lib/seo";
 import {
   getRunner, loadCategory, getBreadcrumbs, getSubcategories, listProducts, getFacets, getFilterLabels,
@@ -79,6 +79,13 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   // Плашки выбранных фильтров: у каждой — ссылка, которая этот фильтр снимает
   const chips: { label: string; href: string }[] = [];
   if (lp.filters.inStock) chips.push({ label: "В наявності", href: hrefWith({ ...lp, filters: { ...lp.filters, inStock: false } }) });
+  if (lp.filters.priceMin !== null || lp.filters.priceMax !== null) {
+    const { priceMin: a, priceMax: b } = lp.filters;
+    chips.push({
+      label: a !== null && b !== null ? `${formatPrice(a)}–${formatPrice(b)} ₴` : a !== null ? `від ${formatPrice(a)} ₴` : `до ${formatPrice(b!)} ₴`,
+      href: hrefWith({ ...lp, page: 1, filters: { ...lp.filters, priceMin: null, priceMax: null } }),
+    });
+  }
   for (const id of lp.filters.brandIds) {
     chips.push({
       label: labels.brands[id] ?? "Бренд",
@@ -144,6 +151,15 @@ export default async function CategoryPage({ params, searchParams }: Props) {
               <label className="check">
                 <input type="checkbox" name="instock" value="1" defaultChecked={lp.filters.inStock} /> Лише в наявності
               </label>
+
+              <fieldset>
+                <legend>Ціна, ₴</legend>
+                <div className="price-range">
+                  <input type="number" name="pmin" inputMode="decimal" min="0" step="any" aria-label="Ціна від" placeholder={facets.price.min !== null ? `від ${formatPrice(facets.price.min)}` : "від"} defaultValue={lp.filters.priceMin ?? ""} />
+                  <span aria-hidden="true">–</span>
+                  <input type="number" name="pmax" inputMode="decimal" min="0" step="any" aria-label="Ціна до" placeholder={facets.price.max !== null ? `до ${formatPrice(facets.price.max)}` : "до"} defaultValue={lp.filters.priceMax ?? ""} />
+                </div>
+              </fieldset>
 
               {facets.brands.length >= 2 && (
                 <fieldset>

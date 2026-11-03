@@ -52,6 +52,8 @@ const SORT_SQL: Record<SortKey, string> = {
 
 export type Filters = {
   inStock: boolean;
+  priceMin: number | null; // цена «от», грн
+  priceMax: number | null; // цена «до», грн
   brandIds: string[];
   attrs: Record<string, string[]>; // id характеристики -> выбранные id значений
 };
@@ -72,6 +74,14 @@ const arr = (v: string | string[] | undefined): string[] => (v === undefined ? [
 const first = (v: string | string[] | undefined): string | undefined => arr(v)[0];
 const isId = (s: string) => /^[0-9a-zA-Z-]{6,64}$/.test(s);
 
+// «1 250,50» / «1250.5» -> 1250.5; всё лишнее и некорректное — игнорируем
+function parsePriceParam(v: string | undefined): number | null {
+  const t = (v ?? "").trim().replace(/\s/g, "").replace(",", ".");
+  if (!t) return null;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 && n <= 9_999_999 ? Math.round(n * 100) / 100 : null;
+}
+
 export function parseListParams(sp: SP): ListParams {
   const sortRaw = first(sp.sort) ?? "default";
   const sort = (sortRaw in SORT_SQL ? sortRaw : "default") as SortKey;
@@ -81,11 +91,17 @@ export function parseListParams(sp: SP): ListParams {
     const [a, v] = pair.split(":");
     if (a && v && isId(a) && isId(v)) (attrs[a] ??= []).push(v);
   }
+  let priceMin = parsePriceParam(first(sp.pmin));
+  let priceMax = parsePriceParam(first(sp.pmax));
+  if (priceMin === 0) priceMin = null; // «от 0» — то же, что без нижней границы
+  if (priceMin !== null && priceMax !== null && priceMin > priceMax) [priceMin, priceMax] = [priceMax, priceMin];
   return {
     sort,
     page,
     filters: {
       inStock: first(sp.instock) === "1",
+      priceMin,
+      priceMax,
       brandIds: arr(sp.brand).filter(isId),
       attrs,
     },
@@ -176,6 +192,14 @@ function baseWhere(scope: Scope, params: unknown[]): { cte: string; where: strin
 
 function applyFilters(f: Filters, where: string[], params: unknown[]) {
   if (f.inStock) where.push(`p."isAvailable" = true`);
+  if (f.priceMin !== null) {
+    params.push(f.priceMin);
+    where.push(`p.price >= $${params.length}`);
+  }
+  if (f.priceMax !== null) {
+    params.push(f.priceMax);
+    where.push(`p.price <= $${params.length}`);
+  }
   if (f.brandIds.length) {
     params.push(f.brandIds);
     where.push(`p."brandId" = ANY($${params.length}::text[])`);
@@ -226,12 +250,14 @@ export async function listProducts(
 export type FacetBrand = { id: string; name: string; n: number };
 export type FacetAttr = { id: string; name: string; unit: string | null; total: number; values: { id: string; value: string; n: number }[] };
 
-export async function getFacets(run: Run, categoryId: string): Promise<{ brands: FacetBrand[]; attributes: FacetAttr[] }> {
+export type FacetPrice = { min: number | null; max: number | null };
+
+export async function getFacets(run: Run, categoryId: string): Promise<{ brands: FacetBrand[]; attributes: FacetAttr[]; price: FacetPrice }> {
   const params: unknown[] = [];
   const { cte, where } = baseWhere({ type: "category", categoryId }, params);
   const whereSql = `WHERE ${where.join(" AND ")}`;
 
-  const [brandRows, attrRows, totalRows] = await Promise.all([
+  const [brandRows, attrRows, totalRows, priceRows] = await Promise.all([
     run(
       `${cte} SELECT b.id, b.name, count(*)::int AS n
        FROM "Product" p JOIN "Brand" b ON b.id = p."brandId" ${whereSql}
@@ -249,6 +275,7 @@ export async function getFacets(run: Run, categoryId: string): Promise<{ brands:
       params
     ),
     run(`${cte} SELECT count(*)::int AS n FROM "Product" p ${whereSql}`, params),
+    run(`${cte} SELECT (min(p.price) FILTER (WHERE p.price > 0))::float8 AS min, max(p.price)::float8 AS max FROM "Product" p ${whereSql}`, params),
   ]);
 
   const totalProducts = Number(totalRows[0]?.n ?? 0);
@@ -272,7 +299,11 @@ export async function getFacets(run: Run, categoryId: string): Promise<{ brands:
     .slice(0, 4)
     .map((a) => ({ ...a, values: a.values.sort((p, q) => q.n - p.n || p.value.localeCompare(q.value)).slice(0, 10) }));
 
-  return { brands: brandRows as FacetBrand[], attributes };
+  const price: FacetPrice = {
+    min: priceRows[0]?.min == null ? null : Math.floor(Number(priceRows[0].min)),
+    max: priceRows[0]?.max == null || Number(priceRows[0].max) <= 0 ? null : Math.ceil(Number(priceRows[0].max)),
+  };
+  return { brands: brandRows as FacetBrand[], attributes, price };
 }
 
 // Подписи для уже выбранных фильтров (чтобы показать плашки-теги, даже если фильтр скрыт из списка).
@@ -386,6 +417,8 @@ export function toQuery(lp: ListParams, opts: { withPage?: boolean } = {}): URLS
   const q = new URLSearchParams();
   if (lp.sort !== "default") q.set("sort", lp.sort);
   if (lp.filters.inStock) q.set("instock", "1");
+  if (lp.filters.priceMin !== null) q.set("pmin", String(lp.filters.priceMin));
+  if (lp.filters.priceMax !== null) q.set("pmax", String(lp.filters.priceMax));
   for (const b of lp.filters.brandIds) q.append("brand", b);
   for (const [a, vs] of Object.entries(lp.filters.attrs)) for (const v of vs) q.append("f", `${a}:${v}`);
   if (opts.withPage && lp.page > 1) q.set("page", String(lp.page));
@@ -393,7 +426,7 @@ export function toQuery(lp: ListParams, opts: { withPage?: boolean } = {}): URLS
 }
 
 export function hasActiveFilters(lp: ListParams): boolean {
-  return lp.filters.inStock || lp.filters.brandIds.length > 0 || Object.keys(lp.filters.attrs).length > 0;
+  return lp.filters.inStock || lp.filters.priceMin !== null || lp.filters.priceMax !== null || lp.filters.brandIds.length > 0 || Object.keys(lp.filters.attrs).length > 0;
 }
 
 

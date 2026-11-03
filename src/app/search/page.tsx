@@ -63,6 +63,20 @@ export default async function SearchPage({ searchParams }: Props) {
       <h1 className="heading page-title">Пошук: «{q}»</h1>
       <p className="muted">{result.total} {plural(result.total, ["товар", "товари", "товарів"])}</p>
 
+      <form action="/search" method="get" className="price-bar">
+        <input type="hidden" name="q" value={q} />
+        {lp.sort !== "default" && <input type="hidden" name="sort" value={lp.sort} />}
+        <span className="price-bar-label">Ціна, ₴</span>
+        <input type="number" name="pmin" inputMode="decimal" min="0" step="any" aria-label="Ціна від" placeholder="від" defaultValue={lp.filters.priceMin ?? ""} />
+        <span aria-hidden="true">–</span>
+        <input type="number" name="pmax" inputMode="decimal" min="0" step="any" aria-label="Ціна до" placeholder="до" defaultValue={lp.filters.priceMax ?? ""} />
+        <label className="check"><input type="checkbox" name="instock" value="1" defaultChecked={lp.filters.inStock} /> Лише в наявності</label>
+        <button type="submit" className="btn-primary">Застосувати</button>
+        {(lp.filters.priceMin !== null || lp.filters.priceMax !== null || lp.filters.inStock) && (
+          <Link href={`/search?${new URLSearchParams({ q, ...(lp.sort !== "default" ? { sort: lp.sort } : {}) }).toString()}`}>Скинути</Link>
+        )}
+      </form>
+
       <div className="toolbar">
         <div className="sort-links">
           <span className="muted">Сортування:</span>
