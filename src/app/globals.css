@@ -569,6 +569,9 @@ h1, h2, h3, .heading { font-weight: 800; letter-spacing: -0.02em; line-height: 1
 
 /* поля и кнопки */
 button, input, select, textarea { border-radius: var(--radius-sm); border-color: var(--color-border); }
+/* Ширина поля/кнопки включает внутренние отступы и рамку — иначе поля и кнопки «вылезают» из своих блоков */
+input, select, textarea, button, fieldset, .btn-primary, .btn-secondary, .btn-light, .btn-ghost, .wide { box-sizing: border-box; }
+input:not([type="checkbox"]):not([type="radio"]), select, textarea { max-width: 100%; }
 input:not([type="checkbox"]):not([type="radio"]), select, textarea { padding: 11px 14px; min-height: 44px; border-radius: var(--radius); }
 textarea { min-height: 0; }
 input:focus-visible, select:focus-visible, textarea:focus-visible { border-color: var(--color-link); outline-offset: 0; }
