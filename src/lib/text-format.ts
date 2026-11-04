@@ -21,8 +21,9 @@ const TAGS = "p|div|br|ul|ol|li|h[1-6]|span|strong|b|em|i|u|a|font|table|tbody|t
 export function normalizeDescription(raw: string | null | undefined): string {
   let s = String(raw ?? "")
     .replace(/\r\n?/g, "\n")
-    .replace(/[\u200b-\u200d\u2060\ufeff]/g, "")
-    .replace(/[\u2000-\u200a\u202f\u205f\u3000]/g, " ");
+    .replace(/[\u2028\u2029\u0085]/g, "\n")
+    .replace(/[\p{Cf}\u0000-\u0008\u000b\u000c\u000e-\u001f]/gu, "") // невидимые символы (нулевой ширины, мягкий перенос, метки направления)
+    .replace(/\p{Zs}/gu, " "); // любые необычные пробелы
   s = decodeEntities(s);
   if (new RegExp(`</?(?:${TAGS})\\b[^>]*>`, "i").test(s)) {
     s = s
@@ -46,7 +47,8 @@ export function normalizeDescription(raw: string | null | undefined): string {
     .trim();
 }
 
-const BULLET = /^(?:[•·*▪●◦–—-])\s+(.*)$/;
+const MARK_CHARS = "\\p{Pd}\\u2212\\u2043*•·▪●◦‣∙■□◆◇►▶➤➢✔✓✅✦★→";
+const BULLET = new RegExp(`^[${MARK_CHARS}]\\s+(.*)$`, "u");
 const NUMBERED = /^(\d{1,2})[.)]\s+(.*)$/;
 const KV = /^([^:\n]{2,40}):\s+(\S.{0,119})$/;
 
@@ -58,13 +60,13 @@ function splitSentences(text: string): string[] {
 // Список, «склеенный» в одну строку: «…такі показники як: - обороти; - навантаження; - температура; і ще багато…».
 // Разбираем его на подводку, пункты и хвост, чтобы каждый пункт был с новой строки.
 // В одной строке может быть несколько таких списков подряд (с подзаголовком перед каждым).
-const INLINE_MARK = /(^|\s)([•▪●◦‣∙]|[-–—‐‑‒−*])\s+(?=\S)/g;
-const BULLET_CHARS = "•▪●◦‣∙";
+const INLINE_MARK = new RegExp(`(^|\\s)([${MARK_CHARS}])\\s+(?=\\S)`, "gu");
+const WEAK_MARK = /^[\p{Pd}\u2212*]$/u; // обычные дефисы и звёздочка — «слабые» маркеры: для них нужна подводка с двоеточием
 const UP = "А-ЯІЇЄҐA-Z";
 function expandInlineList(line: string): string {
   if (line.length < 30) return line;
   const marks = [...line.matchAll(INLINE_MARK)];
-  const strong = marks.filter((m) => BULLET_CHARS.includes(m[2])).length;
+  const strong = marks.filter((m) => !WEAK_MARK.test(m[2])).length;
   if (!(strong >= 2 || marks.length >= 3)) return line;
   const first = marks[0];
   const head = line.slice(0, first.index).trim();

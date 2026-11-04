@@ -13,7 +13,7 @@ import { loadProduct } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ slug: string }> };
+type Props = { params: Promise<{ slug: string }>; searchParams?: Promise<{ dbg?: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -26,8 +26,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
-export default async function ProductPage({ params }: Props) {
+export default async function ProductPage({ params, searchParams }: Props) {
   const { slug } = await params;
+  const debugText = (await searchParams)?.dbg === "1";
 
   let data;
   try {
@@ -138,6 +139,13 @@ export default async function ProductPage({ params }: Props) {
         <section className="pdp-description">
           <h2 className="heading section-title">Опис</h2>
           <RichText text={p.description} />
+          {debugText && (
+            <pre style={{ whiteSpace: "pre-wrap", fontSize: 12 }}>
+              {Array.from(p.description.slice(0, 1500))
+                .map((c) => (/[\p{L}\p{N}]/u.test(c) || (c >= " " && c <= "~") ? c : `[U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0")}]`))
+                .join("")}
+            </pre>
+          )}
         </section>
       )}
 
