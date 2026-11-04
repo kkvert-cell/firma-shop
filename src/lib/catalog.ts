@@ -43,11 +43,12 @@ export const SORT_LABELS: Record<SortKey, string> = {
   price_desc: "Від дорожчих",
   name: "За назвою",
 };
+// Товары «в наличии» всегда идут первыми, при любой сортировке и любых фильтрах; «нет в наличии» — в конце списка
 const SORT_SQL: Record<SortKey, string> = {
   default: `p."isAvailable" DESC, p.name ASC, p.id ASC`,
-  price_asc: `p.price ASC, p.id ASC`,
-  price_desc: `p.price DESC, p.id ASC`,
-  name: `p.name ASC, p.id ASC`,
+  price_asc: `p."isAvailable" DESC, p.price ASC, p.id ASC`,
+  price_desc: `p."isAvailable" DESC, p.price DESC, p.id ASC`,
+  name: `p."isAvailable" DESC, p.name ASC, p.id ASC`,
 };
 
 export type Filters = {
