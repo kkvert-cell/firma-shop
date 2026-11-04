@@ -19,7 +19,10 @@ const TAGS = "p|div|br|ul|ol|li|h[1-6]|span|strong|b|em|i|u|a|font|table|tbody|t
 
 // Превращает описание с HTML-разметкой (если оно попало из Prom) в обычный текст с переводами строк
 export function normalizeDescription(raw: string | null | undefined): string {
-  let s = String(raw ?? "").replace(/\r\n?/g, "\n");
+  let s = String(raw ?? "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\u200b-\u200d\u2060\ufeff]/g, "")
+    .replace(/[\u2000-\u200a\u202f\u205f\u3000]/g, " ");
   s = decodeEntities(s);
   if (new RegExp(`</?(?:${TAGS})\\b[^>]*>`, "i").test(s)) {
     s = s
@@ -54,8 +57,10 @@ function splitSentences(text: string): string[] {
 
 // Список, «склеенный» в одну строку: «…такі показники як: - обороти; - навантаження; - температура; і ще багато…».
 // Разбираем его на подводку, пункты и хвост, чтобы каждый пункт был с новой строки.
-const INLINE_MARK = /(^|\s)([•▪●◦]|[-–—*])\s+(?=\S)/g;
-const BULLET_CHARS = "•▪●◦";
+// В одной строке может быть несколько таких списков подряд (с подзаголовком перед каждым).
+const INLINE_MARK = /(^|\s)([•▪●◦‣∙]|[-–—‐‑‒−*])\s+(?=\S)/g;
+const BULLET_CHARS = "•▪●◦‣∙";
+const UP = "А-ЯІЇЄҐA-Z";
 function expandInlineList(line: string): string {
   if (line.length < 30) return line;
   const marks = [...line.matchAll(INLINE_MARK)];
@@ -65,25 +70,44 @@ function expandInlineList(line: string): string {
   const head = line.slice(0, first.index).trim();
   // для обычных дефисов нужна подводка с двоеточием (или список с самого начала строки), чтобы не ломать обычный текст с тире
   if (strong < 2 && head && !/[:：]$/.test(head)) return line;
-  const items: string[] = [];
+  const raw: string[] = [];
   for (let i = 0; i < marks.length; i++) {
     const start = marks[i].index! + marks[i][0].length;
     const end = i + 1 < marks.length ? marks[i + 1].index! : line.length;
-    items.push(line.slice(start, end).trim());
+    raw.push(line.slice(start, end).trim());
   }
-  let tail = "";
-  const last = items[items.length - 1];
-  const cut = /;\s+|\.\s+(?=[А-ЯІЇЄҐA-Z])/.exec(last);
-  if (cut && cut.index > 0) {
-    tail = last.slice(cut.index + cut[0].length).trim();
-    items[items.length - 1] = last.slice(0, cut.index);
-  }
-  const clean = items.map((x) => x.replace(/[;,.\s]+$/, "").trim()).filter(Boolean);
-  if (clean.length < 2) return line;
+  const trim = (x: string) => x.replace(/[;,.\s]+$/, "").trim();
   const out: string[] = [];
   if (head) out.push(head);
-  for (const x of clean) out.push(`• ${x}`);
-  if (tail) out.push(tail.charAt(0).toUpperCase() + tail.slice(1));
+  let items = 0;
+  raw.forEach((x, i) => {
+    const isLast = i === raw.length - 1;
+    // пункт + подзаголовок следующего списка («…работы. Вимірювані величини (діапазон; точність):»)
+    const nh = !isLast ? new RegExp(`^(.*[.!?])\\s+([${UP}][^.!?]*:)$`).exec(x) : null;
+    if (nh) {
+      out.push(`• ${trim(nh[1])}`);
+      out.push(nh[2].trim());
+      items++;
+      return;
+    }
+    if (isLast) {
+      // хвост после списка: отдельное предложение или «; і ще багато…»
+      const cut = new RegExp(`\\.\\s+(?=[${UP}])|[;]\\s+(?=(?:і|та)\\s+(?:ще|інш|т\\.)|тощо)`, "i").exec(x);
+      if (cut && cut.index > 0) {
+        const tail = x.slice(cut.index + cut[0].length).trim();
+        out.push(`• ${trim(x.slice(0, cut.index))}`);
+        items++;
+        if (tail) out.push(tail.charAt(0).toUpperCase() + tail.slice(1));
+        return;
+      }
+    }
+    const t = trim(x);
+    if (t) {
+      out.push(`• ${t}`);
+      items++;
+    }
+  });
+  if (items < 2) return line;
   return out.join("\n");
 }
 
