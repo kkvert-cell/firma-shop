@@ -81,7 +81,7 @@ export default async function AdminProduct({ params, searchParams }: { params: P
           {([["hit", "Хіт продажів"], ["new", "Новинка"], ["sale", "Акція"]] as const).map(([k, label]) => (
             <label key={k} className="check"><input type="checkbox" name={`flag_${k}`} defaultChecked={((p.homeFlags as string[] | null) ?? []).includes(k)} /> {label}</label>
           ))}
-          <p className="muted small">Товар із «Старою ціною» вище за поточну потрапляє в «Акції» автоматично. «Хіти» також заповнюються самі за продажами, а «Новинки» — за новими товарами.</p>
+          <p className="muted small">Товар із «Старою ціною» вище за поточну потрапляє в «Акції» автоматично. «Хіти» також заповнюються самі за продажами, а «Новинки» — за товарами, доданими за останні 30 днів (окуляри туди не потрапляють).</p>
         </fieldset>
         <label className="check"><input type="checkbox" name="visible" defaultChecked={!p.isHidden} /> Показувати на сайті</label>
         {!p.exact && <label className="check"><input type="checkbox" name="available" defaultChecked={Boolean(p.isAvailable)} /> Є в наявності (залишок із KeyCRM для цього товару не підтягується; вкажіть артикул)</label>}

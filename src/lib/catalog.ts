@@ -446,7 +446,11 @@ const SALES_JOIN = `LEFT JOIN (
     SELECT i."productId" AS pid, sum(i.quantity)::int AS q FROM "OrderItem" i JOIN "Order" o ON o.id = i."orderId"
     WHERE o."createdAt" > now() - interval '90 days' AND o.status::text <> 'CANCELLED' GROUP BY i."productId") s ON s.pid = p.id`;
 
-// «Новинка» — отмеченный вручную или добавленный позже первой загрузки каталога (первая массовая загрузка новинками не считается)
+// «Новинка» — добавленный в каталог за последние NEW_DAYS дней (первая массовая загрузка новинками не считается) или отмеченный вручную.
+// Очки (солнцезащитные, blue blocker и любые другие) в «Новинки» не попадают вообще, даже с ручной отметкой.
+const NEW_DAYS = 30;
+const NOT_GLASSES = `p.name !~* '\\m(окуляр|очк[иіа]|очков|очків|glasses|blue[ -]?block)'`;
+
 const COLLECTIONS: Record<CollectionKind, { from: string; where: string; order: string }> = {
   sale: {
     from: "",
@@ -460,7 +464,7 @@ const COLLECTIONS: Record<CollectionKind, { from: string; where: string; order: 
   },
   new: {
     from: "",
-    where: `('new' = ANY(p."homeFlags") OR p."createdAt" > (SELECT min("createdAt") FROM "Product") + interval '1 day')`,
+    where: `(${NOT_GLASSES}) AND ('new' = ANY(p."homeFlags") OR (p."createdAt" > now() - interval '${NEW_DAYS} days' AND p."createdAt" > (SELECT min("createdAt") FROM "Product") + interval '1 day'))`,
     order: `('new' = ANY(p."homeFlags")) DESC, p."createdAt" DESC, p.id ASC`,
   },
 };
