@@ -65,13 +65,18 @@ const WEAK_MARK = /^[\p{Pd}\u2212*]$/u; // обычные дефисы и звё
 const UP = "А-ЯІЇЄҐA-Z";
 function expandInlineList(line: string): string {
   if (line.length < 30) return line;
-  const marks = [...line.matchAll(INLINE_MARK)];
+  let marks = [...line.matchAll(INLINE_MARK)];
+  // Список начинается с первого маркера, перед которым стоит двоеточие (или с обычных значков «•»).
+  // Так тире внутри вводного текста («Модель X - это прибор…») не мешает найти список дальше по строке.
+  const bulletStart = marks.findIndex((m) => !WEAK_MARK.test(m[2]));
+  const colonStart = marks.findIndex((m) => m.index === 0 || /[:：]$/.test(line.slice(0, m.index).trimEnd()));
+  const startIdx = colonStart >= 0 ? (bulletStart >= 0 ? Math.min(colonStart, bulletStart) : colonStart) : bulletStart;
+  if (startIdx < 0) return line;
+  marks = marks.slice(startIdx);
   const strong = marks.filter((m) => !WEAK_MARK.test(m[2])).length;
   if (!(strong >= 2 || marks.length >= 3)) return line;
   const first = marks[0];
   const head = line.slice(0, first.index).trim();
-  // для обычных дефисов нужна подводка с двоеточием (или список с самого начала строки), чтобы не ломать обычный текст с тире
-  if (strong < 2 && head && !/[:：]$/.test(head)) return line;
   const raw: string[] = [];
   for (let i = 0; i < marks.length; i++) {
     const start = marks[i].index! + marks[i][0].length;
@@ -80,7 +85,12 @@ function expandInlineList(line: string): string {
   }
   const trim = (x: string) => x.replace(/[;,.\s]+$/, "").trim();
   const out: string[] = [];
-  if (head) out.push(head);
+  if (head) {
+    // «…предложение. Особливості:» — подзаголовок списка отдельной строкой
+    const hh = new RegExp(`^(.*[.!?])\\s+([${UP}][^.!?]{1,50}:)$`).exec(head);
+    if (hh) out.push(hh[1], "", hh[2]);
+    else out.push(head);
+  }
   let items = 0;
   raw.forEach((x, i) => {
     const isLast = i === raw.length - 1;
@@ -180,25 +190,28 @@ export function parseDescription(raw: string | null | undefined): Block[] {
   }
   flushAll();
 
-  // Один длинный абзац без разбивки — делим по предложениям, чтобы текст читался
-  if (blocks.length === 1 && blocks[0].t === "p" && blocks[0].lines.length === 1 && blocks[0].lines[0].length > 420) {
-    const sentences = splitSentences(blocks[0].lines[0]);
-    if (sentences.length > 3) {
-      const out: Block[] = [];
-      let cur: string[] = [];
-      let len = 0;
-      for (const s of sentences) {
-        cur.push(s);
-        len += s.length;
-        if (cur.length >= 3 || len >= 320) {
-          out.push({ t: "p", lines: [cur.join(" ")] });
-          cur = [];
-          len = 0;
+  // Длинный абзац из одной строки делим по предложениям, чтобы текст читался
+  const res: Block[] = [];
+  for (const b of blocks) {
+    if (b.t === "p" && b.lines.length === 1 && b.lines[0].length > 420) {
+      const sentences = splitSentences(b.lines[0]);
+      if (sentences.length > 3) {
+        let cur: string[] = [];
+        let len = 0;
+        for (const sn of sentences) {
+          cur.push(sn);
+          len += sn.length;
+          if (cur.length >= 3 || len >= 320) {
+            res.push({ t: "p", lines: [cur.join(" ")] });
+            cur = [];
+            len = 0;
+          }
         }
+        if (cur.length) res.push({ t: "p", lines: [cur.join(" ")] });
+        continue;
       }
-      if (cur.length) out.push({ t: "p", lines: [cur.join(" ")] });
-      return out;
     }
+    res.push(b);
   }
-  return blocks;
+  return res;
 }
