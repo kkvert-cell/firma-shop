@@ -51,8 +51,47 @@ function splitSentences(text: string): string[] {
   return text.split(/(?<=[.!?…])\s+(?=[А-ЯІЇЄҐA-Z0-9«"(])/);
 }
 
+
+// Список, «склеенный» в одну строку: «…такі показники як: - обороти; - навантаження; - температура; і ще багато…».
+// Разбираем его на подводку, пункты и хвост, чтобы каждый пункт был с новой строки.
+const INLINE_MARK = /(^|\s)([•▪●◦]|[-–—*])\s+(?=\S)/g;
+const BULLET_CHARS = "•▪●◦";
+function expandInlineList(line: string): string {
+  if (line.length < 30) return line;
+  const marks = [...line.matchAll(INLINE_MARK)];
+  const strong = marks.filter((m) => BULLET_CHARS.includes(m[2])).length;
+  if (!(strong >= 2 || marks.length >= 3)) return line;
+  const first = marks[0];
+  const head = line.slice(0, first.index).trim();
+  // для обычных дефисов нужна подводка с двоеточием (или список с самого начала строки), чтобы не ломать обычный текст с тире
+  if (strong < 2 && head && !/[:：]$/.test(head)) return line;
+  const items: string[] = [];
+  for (let i = 0; i < marks.length; i++) {
+    const start = marks[i].index! + marks[i][0].length;
+    const end = i + 1 < marks.length ? marks[i + 1].index! : line.length;
+    items.push(line.slice(start, end).trim());
+  }
+  let tail = "";
+  const last = items[items.length - 1];
+  const cut = /;\s+|\.\s+(?=[А-ЯІЇЄҐA-Z])/.exec(last);
+  if (cut && cut.index > 0) {
+    tail = last.slice(cut.index + cut[0].length).trim();
+    items[items.length - 1] = last.slice(0, cut.index);
+  }
+  const clean = items.map((x) => x.replace(/[;,.\s]+$/, "").trim()).filter(Boolean);
+  if (clean.length < 2) return line;
+  const out: string[] = [];
+  if (head) out.push(head);
+  for (const x of clean) out.push(`• ${x}`);
+  if (tail) out.push(tail.charAt(0).toUpperCase() + tail.slice(1));
+  return out.join("\n");
+}
+
 export function parseDescription(raw: string | null | undefined): Block[] {
-  const text = normalizeDescription(raw);
+  const text = normalizeDescription(raw)
+    .split("\n")
+    .map(expandInlineList)
+    .join("\n");
   if (!text) return [];
   const blocks: Block[] = [];
   let para: string[] = [];

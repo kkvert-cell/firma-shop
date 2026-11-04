@@ -53,7 +53,7 @@ export default async function AdminProduct({ params, searchParams }: { params: P
         <input type="hidden" name="id" value={String(p.id)} />
         <label>Назва<input name="name" defaultValue={String(p.name)} maxLength={250} required /></label>
         <label>Опис<textarea name="description" rows={9} defaultValue={normalizeDescription(String(p.description ?? ""))} maxLength={20000} />
-          <span className="muted small">Порожній рядок — новий абзац. Рядки, що починаються з «- », — список. Три й більше рядки «Назва: значення» поспіль — таблиця характеристик. Короткий рядок із двокрапкою в кінці — підзаголовок.</span>
+          <span className="muted small">Порожній рядок — новий абзац. Рядки, що починаються з «- », — список (пункти в одному рядку після двокрапки теж розбиваються на список автоматично). Три й більше рядки «Назва: значення» поспіль — таблиця характеристик. Короткий рядок із двокрапкою в кінці — підзаголовок.</span>
         </label>
         <div className="adm-two">
           <label>Ціна, ₴<input name="price" inputMode="decimal" defaultValue={String(p.price)} required /></label>
