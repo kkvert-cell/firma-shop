@@ -9,11 +9,16 @@ const STATEMENTS = [
   `ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "lockedFields" TEXT[] NOT NULL DEFAULT '{}'`,
   `ALTER TABLE "Category" ADD COLUMN IF NOT EXISTS "lockedFields" TEXT[] NOT NULL DEFAULT '{}'`,
   `ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "homeFlags" TEXT[] NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "saleStartsAt" TIMESTAMPTZ`,
+  `ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "saleEndsAt" TIMESTAMPTZ`,
+  `ALTER TABLE "Product" ADD COLUMN IF NOT EXISTS "saleEndedPrice" NUMERIC(12,2)`,
+  `CREATE TABLE IF NOT EXISTS "PriceLog" ("id" BIGSERIAL PRIMARY KEY, "productId" TEXT NOT NULL, "price" NUMERIC(12,2) NOT NULL, "recordedAt" TIMESTAMPTZ NOT NULL DEFAULT now())`,
+  `CREATE INDEX IF NOT EXISTS "PriceLog_product_time_idx" ON "PriceLog" ("productId", "recordedAt" DESC)`,
 ];
 
 const needsMigration = (e: unknown) => {
   const m = e instanceof Error ? e.message : String(e);
-  return /does not exist/i.test(m) && /(isHidden|lockedFields|homeFlags)/.test(m);
+  return /does not exist/i.test(m) && /(isHidden|lockedFields|homeFlags|saleStartsAt|saleEndsAt|saleEndedPrice|PriceLog)/.test(m);
 };
 
 let healing: Promise<void> | null = null;

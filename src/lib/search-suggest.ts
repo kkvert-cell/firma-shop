@@ -2,6 +2,7 @@
 // Правила те же, что у страницы поиска: каждое слово должно встретиться в названии, артикуле или коде товара.
 
 import type { Run } from "./catalog";
+import { OLD_PRICE_SQL } from "./sales";
 
 export type SuggestProduct = { name: string; slug: string; price: number; oldPrice: number | null; isAvailable: boolean; image: string | null };
 export type SuggestCategory = { name: string; slug: string; path: string };
@@ -28,7 +29,7 @@ export async function suggest(run: Run, q: string, limit = 6): Promise<Suggestio
 
   const [prods, cats] = await Promise.all([
     run(
-      `SELECT p.name, p.slug, p.price::float8 AS price, p."oldPrice"::float8 AS "oldPrice", p."isAvailable",
+      `SELECT p.name, p.slug, p.price::float8 AS price, ${OLD_PRICE_SQL}, p."isAvailable",
               (SELECT i.url FROM "ProductImage" i WHERE i."productId" = p.id ORDER BY i."sortOrder" LIMIT 1) AS image,
               count(*) OVER ()::int AS total
        FROM "Product" p

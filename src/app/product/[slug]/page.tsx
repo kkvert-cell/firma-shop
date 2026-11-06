@@ -7,7 +7,7 @@ import ProductGallery from "@/components/ProductGallery";
 import Icon from "@/components/Icon";
 import RichText from "@/components/RichText";
 import AddToCart from "@/components/AddToCart";
-import { SITE_URL, SHOP_PHONE, SHOP_PHONE_TEXT, formatPrice } from "@/lib/site";
+import { SITE_NAME, SITE_URL, SHOP_PHONE, SHOP_PHONE_TEXT, formatPrice } from "@/lib/site";
 import { jsonLd, productJsonLd, productMetadata, breadcrumbJsonLd } from "@/lib/seo";
 import { loadProduct } from "@/lib/catalog";
 
@@ -88,6 +88,13 @@ export default async function ProductPage({ params, searchParams }: Props) {
               <span className="stock-out">Ціну уточнюйте</span>
             )}
           </div>
+
+          {discount > 0 && p.saleUntil && (
+            <p className="sale-period">
+              Акційна ціна діє {p.saleFrom ? `з ${p.saleFrom} ` : ""}до {p.saleUntil} включно (інтернет-магазин {SITE_NAME}). Попередня ціна — найнижча за останні 30 днів.{" "}
+              <Link href="/info/akcii">Умови акцій</Link>
+            </p>
+          )}
 
           <p className={p.isAvailable ? "stock-in" : "stock-out"}>
             {!p.isAvailable

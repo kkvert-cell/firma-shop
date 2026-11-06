@@ -1,6 +1,7 @@
 // Свіжі ціни й наявність для товарів з кошика (кошик у браузері міг "застаріти").
 import { NextRequest, NextResponse } from "next/server";
 import { getRunner } from "@/lib/catalog";
+import { OLD_PRICE_SQL } from "@/lib/sales";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const rows = await getRunner()(
-      `SELECT p.id, p.name, p.slug, p.price::float8 AS price, p."oldPrice"::float8 AS "oldPrice", p."isAvailable",
+      `SELECT p.id, p.name, p.slug, p.price::float8 AS price, ${OLD_PRICE_SQL}, p."isAvailable",
               p."stockQty", (p."stockSyncedAt" IS NOT NULL) AS "stockExact",
               (SELECT i.url FROM "ProductImage" i WHERE i."productId" = p.id ORDER BY i."sortOrder" LIMIT 1) AS image
        FROM "Product" p WHERE p.id = ANY($1::text[]) AND p."isHidden" = false`,

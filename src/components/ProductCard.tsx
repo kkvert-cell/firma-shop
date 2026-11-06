@@ -23,6 +23,7 @@ export default function ProductCard({ p }: { p: ProductCardData }) {
           <span className="stock-out">Ціну уточнюйте</span>
         )}
       </div>
+      {p.saleUntil && p.oldPrice && p.oldPrice > p.price && <div className="sale-until">Акція до {p.saleUntil.slice(0, 5)}</div>}
       <div className={p.isAvailable ? "stock-in" : "stock-out"}>{p.isAvailable ? "В наявності" : "Немає в наявності"}</div>
     </Link>
   );

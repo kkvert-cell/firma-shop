@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Breadcrumbs from "@/components/Breadcrumbs";
@@ -40,6 +41,11 @@ export default async function CollectionPage({ params, searchParams }: Props) {
       {result && (
         <>
           <p className="muted">{result.total} {plural(result.total, ["товар", "товари", "товарів"])}</p>
+          {kind === "sale" && (
+            <p className="muted small">
+              Біля кожного товару вказано, до якої дати діє знижка. Після цієї дати ціна повертається до звичайної. <Link href="/info/akcii">Умови акцій</Link>
+            </p>
+          )}
           {result.items.length > 0 ? (
             <div className="product-grid">{result.items.map((p) => <ProductCard key={p.id} p={p} />)}</div>
           ) : (

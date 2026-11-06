@@ -126,6 +126,21 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
     [j([...products.values()]), runTs]
   );
 
+  // 3а. Акції, які сайт уже завершив за строком: якщо Prom усе ще віддає ту саму знижку — лишаємо звичайну ціну.
+  //     Спочатку знімаємо позначку з товарів, у яких знижка зникла з фіда, потім повертаємо звичайну ціну тим, у кого вона лишилась.
+  const feedIds = items.map((i) => i.externalId);
+  await sql(
+    `UPDATE "Product" SET "saleEndedPrice" = NULL
+      WHERE "externalId" = ANY($1::text[]) AND "saleEndedPrice" IS NOT NULL AND "oldPrice" IS NULL AND NOT ('price' = ANY("lockedFields"))`,
+    [feedIds]
+  );
+  await sql(
+    `UPDATE "Product" SET price = "oldPrice", "oldPrice" = NULL, "updatedAt" = now()
+      WHERE "externalId" = ANY($1::text[]) AND NOT ('price' = ANY("lockedFields"))
+        AND "saleEndedPrice" IS NOT NULL AND "oldPrice" > price AND price = "saleEndedPrice"`,
+    [feedIds]
+  );
+
   // 4. Фото: заменяем целиком набор фото каждого товара
   const ids = items.map((i) => i.externalId);
   const imageRows = items.flatMap((it) => it.images.map((url, ord) => ({ externalId: it.externalId, url, ord })));

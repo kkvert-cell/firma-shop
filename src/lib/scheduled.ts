@@ -10,12 +10,20 @@ import { retryPendingOrders } from "./keycrm-orders";
 import { getState, setState } from "./sync-state";
 import { promRefreshStep } from "./prom-refresh";
 import { healRun } from "./schema-heal";
+import { maintainSales } from "./sales";
 
 // Другий розклад: оновлення каталогу з Prom (окремим запуском, щоб не ділити ліміти із залишками й замовленнями).
 // Той самий рядок має стояти в wrangler.json → triggers.crons.
 export const PROM_CRON = "2,12,22,32,42,52 * * * *";
 
 export async function runPromRefresh(now: Date = new Date()) {
+  // Акції: завершення за строком, нові строки, історія цін (працює і без фіда Prom)
+  try {
+    const m = await maintainSales(healRun(getSql() as unknown as Run));
+    if (m.ended || m.started || m.cleared) console.log("[cron] Акції:", JSON.stringify(m));
+  } catch (err) {
+    console.error("[cron] Помилка обслуговування акцій:", err);
+  }
   const feedUrl = process.env.PROM_FEED_URL;
   if (!feedUrl) return;
   try {

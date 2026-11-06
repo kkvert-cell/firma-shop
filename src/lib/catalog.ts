@@ -4,6 +4,7 @@
 
 import { cache } from "react";
 import { healRun } from "./schema-heal";
+import { OLD_PRICE_SQL, SALE_ACTIVE, SALE_UNTIL_SQL } from "./sales";
 import { getSql } from "./db";
 
 export type Row = Record<string, unknown>;
@@ -30,7 +31,8 @@ export type ProductCardData = {
   name: string;
   slug: string;
   price: number;
-  oldPrice: number | null;
+  oldPrice: number | null; // показується лише поки діє акція
+  saleUntil: string | null; // дата кінця акції ДД.ММ.РРРР, лише поки акція діє
   isAvailable: boolean;
   vendorCode: string | null;
   image: string | null;
@@ -234,7 +236,7 @@ export async function listProducts(
     run(`${cte} SELECT count(*)::int AS n FROM "Product" p ${whereSql}`, params),
     run(
       `${cte}
-       SELECT p.id, p.name, p.slug, p.price::float8 AS price, p."oldPrice"::float8 AS "oldPrice",
+       SELECT p.id, p.name, p.slug, p.price::float8 AS price, ${OLD_PRICE_SQL}, ${SALE_UNTIL_SQL},
               p."isAvailable", p."vendorCode",
               (SELECT i.url FROM "ProductImage" i WHERE i."productId" = p.id ORDER BY i."sortOrder" LIMIT 1) AS image
        FROM "Product" p ${whereSql}
@@ -334,6 +336,8 @@ export type ProductFull = {
   description: string | null;
   price: number;
   oldPrice: number | null;
+  saleUntil: string | null;
+  saleFrom: string | null;
   currency: string;
   isAvailable: boolean;
   stockQty: number;
@@ -350,7 +354,8 @@ export type ProductFull = {
 
 export async function getProductBySlug(run: Run, slug: string) {
   const rows = await run(
-    `SELECT p.id, p.name, p.slug, p.description, p.price::float8 AS price, p."oldPrice"::float8 AS "oldPrice",
+    `SELECT p.id, p.name, p.slug, p.description, p.price::float8 AS price, ${OLD_PRICE_SQL}, ${SALE_UNTIL_SQL},
+            (CASE WHEN ${SALE_ACTIVE} THEN to_char(p."saleStartsAt" AT TIME ZONE 'Europe/Kyiv', 'DD.MM.YYYY') END) AS "saleFrom",
             p.currency, p."isAvailable", p."stockQty", (p."stockSyncedAt" IS NOT NULL) AS "stockExact",
             p."vendorCode", p.sku, p."sourceUrl", p."seoTitle", p."seoDescription",
             p."categoryId", c.path AS "categoryPath", b.name AS brand
@@ -374,7 +379,7 @@ export async function getProductBySlug(run: Run, slug: string) {
       [product.id]
     ),
     run(
-      `SELECT p.id, p.name, p.slug, p.price::float8 AS price, p."oldPrice"::float8 AS "oldPrice",
+      `SELECT p.id, p.name, p.slug, p.price::float8 AS price, ${OLD_PRICE_SQL}, ${SALE_UNTIL_SQL},
               p."isAvailable", p."vendorCode",
               (SELECT i.url FROM "ProductImage" i WHERE i."productId" = p.id ORDER BY i."sortOrder" LIMIT 1) AS image
        FROM "Product" p
@@ -437,7 +442,7 @@ export type CollectionKind = "sale" | "new" | "hits";
 export const COLLECTION_KINDS: CollectionKind[] = ["sale", "hits", "new"];
 export const COLLECTION_TITLES: Record<CollectionKind, string> = { sale: "Акції", new: "Новинки", hits: "Хіти продажів" };
 export const COLLECTION_DESCRIPTIONS: Record<CollectionKind, string> = {
-  sale: "Товари зі знижкою: стара й нова ціна поруч.",
+  sale: "Товари зі знижкою: стара й нова ціна поруч, строк дії акції вказано біля кожного товару.",
   new: "Нові надходження в каталог.",
   hits: "Найпопулярніші товари нашого магазину.",
 };
@@ -454,8 +459,9 @@ const NOT_GLASSES = `p.name !~* '\\m(окуляр|очк[иіа]|очков|оч
 const COLLECTIONS: Record<CollectionKind, { from: string; where: string; order: string }> = {
   sale: {
     from: "",
-    where: `(p."oldPrice" > p.price OR 'sale' = ANY(p."homeFlags"))`,
-    order: `CASE WHEN p."oldPrice" > p.price THEN (p."oldPrice" - p.price) / p."oldPrice" ELSE 0 END DESC, p.name ASC, p.id ASC`,
+    // Лише акції, що діють зараз (є стара ціна й не минув строк). Ручна відмітка «Акція» без діючої знижки більше нічого не показує.
+    where: SALE_ACTIVE,
+    order: `(p."oldPrice" - p.price) / p."oldPrice" DESC, p.name ASC, p.id ASC`,
   },
   hits: {
     from: SALES_JOIN,
@@ -470,7 +476,7 @@ const COLLECTIONS: Record<CollectionKind, { from: string; where: string; order: 
 };
 
 const SHOWABLE = `p."isHidden" = false AND p."isAvailable" = true AND p.price > 0`;
-const CARD_COLS = `p.id, p.name, p.slug, p.price::float8 AS price, p."oldPrice"::float8 AS "oldPrice", p."isAvailable", p."vendorCode",
+const CARD_COLS = `p.id, p.name, p.slug, p.price::float8 AS price, ${OLD_PRICE_SQL}, ${SALE_UNTIL_SQL}, p."isAvailable", p."vendorCode",
        (SELECT i.url FROM "ProductImage" i WHERE i."productId" = p.id ORDER BY i."sortOrder" LIMIT 1) AS image`;
 
 export async function listCollection(run: Run, kind: CollectionKind, page: number, perPage = PER_PAGE): Promise<{ items: ProductCardData[]; total: number }> {

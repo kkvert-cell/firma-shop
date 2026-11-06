@@ -28,6 +28,7 @@ export default async function NewProduct({ searchParams }: { searchParams: Promi
           <label>Ціна, ₴<input name="price" inputMode="decimal" required /></label>
           <label>Стара ціна, ₴ (необов&apos;язково)<input name="oldPrice" inputMode="decimal" /></label>
         </div>
+        <label>Акція діє до (обов&apos;язково, якщо вказано стару ціну)<input type="date" name="saleTo" /></label>
         <div className="adm-two">
           <label>Артикул (KeyCRM)<input name="vendorCode" maxLength={40} /></label>
           <label>Бренд<input name="brand" maxLength={80} /></label>

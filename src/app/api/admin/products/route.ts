@@ -4,6 +4,7 @@ import { apiAdminOk } from "@/lib/admin-auth";
 import { getRunner } from "@/lib/catalog";
 import { slugify } from "@/lib/prom-feed";
 import { normalizeDescription } from "@/lib/text-format";
+import { endOfDayKyiv, logPrice } from "@/lib/sales";
 import { ID_RE, PRODUCT_LOCKS, addLocks, oneLine, parseImages, parsePrice, rid, text, uniqueSlug } from "@/lib/admin-catalog";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,17 @@ async function resolveBrand(run: ReturnType<typeof getRunner>, name: string): Pr
   await run(`INSERT INTO "Brand"(name, slug) VALUES ($1, $2) ON CONFLICT DO NOTHING`, [name, slug]);
   const r = await run(`SELECT id FROM "Brand" WHERE slug = $1 LIMIT 1`, [slug]);
   return r[0] ? String(r[0].id) : null;
+}
+
+// Строк акції: якщо стара ціна вища за поточну, потрібна дата, до якої діє знижка (вимога Закону «Про рекламу»).
+// Повертає null — знижки немає; рядок РРРР-ММ-ДД — діє до цієї дати включно; { error } — помилка.
+function saleEnd(v: unknown, price: number, oldPrice: number | null): string | null | { error: string } {
+  if (oldPrice === null || !(oldPrice > price)) return null;
+  const s = String(v ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(Date.parse(s))) return { error: "Для знижки вкажіть, до якої дати діє акція (поле «Акція діє до»)" };
+  const today = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Kyiv" });
+  if (s < today) return { error: "Дата закінчення акції вже минула — оберіть сьогоднішню або пізнішу" };
+  return s;
 }
 
 async function setImages(run: ReturnType<typeof getRunner>, productId: string, urls: string[]) {
@@ -50,12 +62,18 @@ export async function POST(req: NextRequest) {
       const brandId = await resolveBrand(run, oneLine(f.get("brand"), 80));
       const vendor = oneLine(f.get("vendorCode"), 40) || null;
       const slug = `m${rid()}-${await uniqueSlug(run, "Product", name)}`.slice(0, 120);
+      const newOld = parsePrice(f.get("oldPrice")) || null;
+      const endNew = saleEnd(f.get("saleTo"), price, newOld);
+      if (endNew !== null && typeof endNew === "object") return err(req, "/admin/products/new", endNew.error);
       const rows = await run(
-        `INSERT INTO "Product"(sku, slug, name, description, "categoryId", "brandId", price, "oldPrice", currency, "isAvailable", "vendorCode", "updatedAt")
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'UAH', true, $9, now()) RETURNING id`,
-        [`manual-${rid()}${rid()}`, slug, name, text(f.get("description"), 20000) || null, categoryId, brandId, price, parsePrice(f.get("oldPrice")) || null, vendor]
+        `INSERT INTO "Product"(sku, slug, name, description, "categoryId", "brandId", price, "oldPrice", currency, "isAvailable", "vendorCode", "updatedAt", "saleStartsAt", "saleEndsAt")
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'UAH', true, $9, now(),
+                 CASE WHEN $10::text IS NULL THEN NULL ELSE now() END,
+                 CASE WHEN $10::text IS NULL THEN NULL ELSE ${endOfDayKyiv(10)} END) RETURNING id`,
+        [`manual-${rid()}${rid()}`, slug, name, text(f.get("description"), 20000) || null, categoryId, brandId, price, newOld, vendor, endNew]
       );
       const newId = String(rows[0].id);
+      await logPrice(run, newId);
       await setImages(run, newId, parseImages(f.get("images")));
       return go(req, `/admin/products/${newId}`, "ok=created");
     }
@@ -86,6 +104,10 @@ export async function POST(req: NextRequest) {
       if (Number.isNaN(oldPrice)) return err(req, back, "Старая цена должна быть числом или пустой");
       if (!ID_RE.test(categoryId) || !(await run(`SELECT 1 AS x FROM "Category" WHERE id = $1`, [categoryId])).length) return err(req, back, "Выберите категорию из списка");
 
+      const endDay = saleEnd(f.get("saleTo"), price, oldPrice);
+      if (endDay !== null && typeof endDay === "object") return err(req, back, endDay.error);
+      const priceChanged = price !== Number(cur.price) || (oldPrice || null) !== (cur.oldPrice ?? null);
+
       const norm = (s: unknown) => String(s ?? "").replace(/\r\n/g, "\n").trim();
       const changed: string[] = [];
       if (name !== norm(cur.name)) changed.push("name");
@@ -106,12 +128,16 @@ export async function POST(req: NextRequest) {
                 "brandId" = CASE WHEN $7::boolean THEN $8 ELSE "brandId" END,
                 "vendorCode" = $9, "isHidden" = $10, "seoTitle" = $11, "seoDescription" = $12,
                 "isAvailable" = CASE WHEN "stockSyncedAt" IS NULL THEN $13 ELSE "isAvailable" END,
-                "lockedFields" = $14::text[], "homeFlags" = $15::text[], "updatedAt" = now()
+                "lockedFields" = $14::text[], "homeFlags" = $15::text[], "updatedAt" = now(),
+                "saleStartsAt" = CASE WHEN $16::text IS NULL THEN NULL WHEN "saleStartsAt" IS NULL OR $17::boolean THEN now() ELSE "saleStartsAt" END,
+                "saleEndsAt" = CASE WHEN $16::text IS NULL THEN NULL ELSE ${endOfDayKyiv(16)} END,
+                "saleEndedPrice" = CASE WHEN $17::boolean THEN NULL ELSE "saleEndedPrice" END
          WHERE id = $1`,
         [id, name, description || null, price, oldPrice || null, categoryId, changed.includes("brand"), brandId ?? null, oneLine(f.get("vendorCode"), 40) || null,
          !visible, oneLine(f.get("seoTitle"), 200) || null, oneLine(f.get("seoDescription"), 400) || null, manualAvail, locks,
-         (["hit", "new", "sale"] as const).filter((k) => f.get(`flag_${k}`) === "on")]
+         (["hit", "new", "sale"] as const).filter((k) => f.get(`flag_${k}`) === "on"), endDay, priceChanged]
       );
+      if (priceChanged) await logPrice(run, id);
       if (changed.includes("images")) await setImages(run, id, images);
       return go(req, back, "ok=saved");
     }

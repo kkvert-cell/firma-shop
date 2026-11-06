@@ -27,7 +27,9 @@ export default async function AdminProduct({ params, searchParams }: { params: P
     await run(
       `SELECT p.id, p.name, p.slug, p.description, p.price::float8 AS price, p."oldPrice"::float8 AS "oldPrice", p."categoryId", p."vendorCode",
               p."isHidden", p."isAvailable", p."externalId", p."stockQty", p."stockSyncedAt" IS NOT NULL AS exact, p."seoTitle", p."seoDescription",
-              p."lockedFields", p."homeFlags", b.name AS brand
+              p."lockedFields", p."homeFlags", b.name AS brand,
+              to_char(p."saleEndsAt" AT TIME ZONE 'Europe/Kyiv', 'YYYY-MM-DD') AS "saleTo",
+              to_char(p."saleStartsAt" AT TIME ZONE 'Europe/Kyiv', 'DD.MM.YYYY') AS "saleFrom"
        FROM "Product" p LEFT JOIN "Brand" b ON b.id = p."brandId" WHERE p.id = $1`,
       [id]
     )
@@ -59,6 +61,13 @@ export default async function AdminProduct({ params, searchParams }: { params: P
           <label>Ціна, ₴<input name="price" inputMode="decimal" defaultValue={String(p.price)} required /></label>
           <label>Стара ціна, ₴ (для знижки)<input name="oldPrice" inputMode="decimal" defaultValue={p.oldPrice ? String(p.oldPrice) : ""} /></label>
         </div>
+        <label>Акція діє до (обов&apos;язково, якщо вказано стару ціну)
+          <input type="date" name="saleTo" defaultValue={p.saleTo ? String(p.saleTo) : ""} />
+          <span className="muted small">
+            {p.saleTo ? `Знижка діє з ${String(p.saleFrom)} до ${String(p.saleTo).split("-").reverse().join(".")} включно. ` : ""}
+            Після цієї дати ціна сама повернеться до старої, а знижка зникне з сайту. Покупці бачать і дату початку, і дату закінчення.
+          </span>
+        </label>
         <label>Категорія
           <select name="categoryId" defaultValue={String(p.categoryId)}>
             {cats.map((c) => <option key={c.id} value={c.id}>{catLabel(c)}</option>)}
