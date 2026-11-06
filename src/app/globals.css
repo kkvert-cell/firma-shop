@@ -474,8 +474,8 @@ a.btn-primary:hover { text-decoration: none; }
 /* Підвал і сторінки з умовами */
 .site-footer { margin-top: var(--space-8, 48px); padding: var(--space-5, 24px) var(--space-4, 16px); border-top: var(--border-hairline); text-align: center; }
 .site-footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2, 8px) var(--space-4, 16px); margin-bottom: var(--space-3, 12px); font-size: var(--text-sm); }
-.legal-section { max-width: 760px; }
-.legal-section p { line-height: 1.6; }
+.legal-section, .legal-lead { max-width: 72ch; }
+.legal-section .rt { max-width: none; }
 
 /* Адмінка */
 .adm-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, 8px) var(--space-4, 16px); padding: var(--space-3, 12px) var(--space-4, 16px); border-bottom: var(--border-hairline); background: var(--color-bg-raised); }
@@ -700,7 +700,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { border-color
 .rt dl > div { display: grid; grid-template-columns: minmax(110px, 40%) 1fr; gap: 0 var(--space-4); padding: 8px 2px; border-bottom: var(--border-hairline); }
 .rt dt { color: var(--color-ink-muted); }
 .rt dd { margin: 0; font-weight: 600; }
-@media (min-width: 900px) { .rt p { text-align: justify; hyphens: auto; } }
+.rt li { text-wrap: pretty; }
+/* Один вигляд для всього тексту: абзаци й пункти списків вирівнюються по ширині (на комп'ютері), на вузьких екранах — по лівому краю */
+@media (min-width: 900px) { .rt p, .rt li { text-align: justify; hyphens: auto; } }
 .pdp-description p { white-space: normal; }
 .seo-text.rt { margin-top: var(--space-6); color: var(--color-ink-muted); font-size: var(--text-sm); }
 
