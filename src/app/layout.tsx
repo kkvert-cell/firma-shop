@@ -5,6 +5,9 @@ import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import { SITE_URL } from "@/lib/site";
 
+// Меню каталогу в шапці читається з бази, тому сторінки рендеряться під час запиту, а не під час збірки
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: "Firma Vymir — вимірювальний та ручний інструмент",

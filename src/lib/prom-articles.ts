@@ -4,14 +4,23 @@
 
 import type { Run } from "./catalog";
 
-const TOKEN = /<offer\s[^>]*?\bid="([^"]+)"|<vendorCode>\s*(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*?))\s*<\/vendorCode>/g;
+// Один проход по YML: артикулы (vendorCode), группы продавца (<category id parentId>) и группа каждого товара (<categoryId>).
+const TOKEN =
+  /<offer\s[^>]*?\bid="([^"]+)"|<vendorCode>\s*(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*?))\s*<\/vendorCode>|<categoryId>\s*(\d+)\s*<\/categoryId>|<category\s+([^>]*?)>\s*(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*?))\s*<\/category>/g;
 
 const decodeEntities = (s: string) =>
   s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;|&#39;/g, "'").replace(/&amp;/g, "&");
-const CARRY = 400;
+const CARRY = 600;
 
-export async function scanVendorCodes(stream: ReadableStream<Uint8Array>): Promise<{ codes: Map<string, string>; offers: number }> {
+export type YmlGroup = { id: string; parentId: string | null; name: string; order: number };
+export type YmlScan = { codes: Map<string, string>; offers: number; groups: YmlGroup[]; offerGroup: Map<string, string> };
+
+const attr = (attrs: string, name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1] ?? null;
+
+export async function scanYml(stream: ReadableStream<Uint8Array>): Promise<YmlScan> {
   const codes = new Map<string, string>();
+  const groups: YmlGroup[] = [];
+  const offerGroup = new Map<string, string>();
   let offers = 0;
   let current: string | null = null;
   const reader = stream.getReader();
@@ -27,6 +36,14 @@ export async function scanVendorCodes(stream: ReadableStream<Uint8Array>): Promi
       if (m[1] !== undefined) {
         current = m[1];
         offers++;
+      } else if (m[4] !== undefined) {
+        if (current && !offerGroup.has(current)) offerGroup.set(current, m[4]);
+      } else if (m[5] !== undefined) {
+        const id = attr(m[5], "id");
+        if (id) {
+          const parent = attr(m[5], "parentId");
+          groups.push({ id, parentId: parent && parent !== "0" ? parent : null, name: decodeEntities((m[6] ?? m[7] ?? "").trim()), order: groups.length });
+        }
       } else if (current && !codes.has(current)) {
         const code = decodeEntities((m[2] ?? m[3] ?? "").trim());
         if (code) codes.set(current, code);
@@ -43,6 +60,12 @@ export async function scanVendorCodes(stream: ReadableStream<Uint8Array>): Promi
   }
   buf += decoder.decode();
   consume(true);
+  return { codes, offers, groups, offerGroup };
+}
+
+// Сумісність зі старим кодом: тільки артикули
+export async function scanVendorCodes(stream: ReadableStream<Uint8Array>): Promise<{ codes: Map<string, string>; offers: number }> {
+  const { codes, offers } = await scanYml(stream);
   return { codes, offers };
 }
 

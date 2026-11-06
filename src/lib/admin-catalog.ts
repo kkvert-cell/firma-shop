@@ -1,16 +1,22 @@
 // Общие помощники для редактирования каталога в админке.
 import type { Run } from "./catalog";
 import { slugify } from "./prom-feed";
+import { getCatalogMode } from "./prom-groups";
 
 export const ID_RE = /^[0-9a-zA-Z_-]{6,40}$/;
 
-export type CatRow = { id: string; name: string; path: string; parentId: string | null; isActive: boolean; depth: number; n: number; lockedFields: string[] };
+export type CatRow = { id: string; name: string; path: string; parentId: string | null; isActive: boolean; depth: number; n: number; lockedFields: string[]; nameSource?: string | null; nameAuto?: boolean };
 
+// Список категорій для адмінки відповідає режиму каталогу: «legacy» — категорії маркетплейсу, «groups» — ваші групи Prom
 export async function allCategories(run: Run): Promise<CatRow[]> {
+  const mode = await getCatalogMode(run);
   const rows = await run(
-    `SELECT c.id, c.name, c.path, c."parentId", c."isActive", c."lockedFields",
+    `SELECT c.id, c.name, c.path, c."parentId", c."isActive", c."lockedFields", c."nameSource", c."nameAuto",
             (SELECT count(*)::int FROM "Product" p WHERE p."categoryId" = c.id) AS n
-     FROM "Category" c WHERE c.path IS NOT NULL ORDER BY c.path`
+     FROM "Category" c WHERE c.path IS NOT NULL AND c.path <> 'Без групи'
+       AND (($1 = 'groups' AND c.source = 'group' AND c."inFeed") OR ($1 <> 'groups' AND c.source = 'legacy'))
+     ORDER BY c.path`,
+    [mode]
   );
   return rows.map((r) => ({
     id: String(r.id),
@@ -21,6 +27,8 @@ export async function allCategories(run: Run): Promise<CatRow[]> {
     depth: String(r.path).split(" > ").length - 1,
     n: Number(r.n),
     lockedFields: (r.lockedFields as string[] | null) ?? [],
+    nameSource: r.nameSource ? String(r.nameSource) : null,
+    nameAuto: Boolean(r.nameAuto),
   }));
 }
 
@@ -74,6 +82,7 @@ export const LOCK_LABEL: Record<string, string> = {
   brand: "бренд",
   images: "фото",
   visibility: "видимость",
+  sort: "порядок",
 };
 
 export const addLocks = (cur: string[], add: string[]) => [...new Set([...cur, ...add])];

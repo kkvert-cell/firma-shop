@@ -70,7 +70,8 @@ export async function promRefreshStep(run: Run, feedUrl: string, now: Date = new
 
     const from = st.cursor;
     const slice = items.slice(from, from + PORTION).map(parseItem).filter((i) => i !== null);
-    const stats = slice.length ? await importItems(run as SqlRunner, slice, runTs) : { products: 0 };
+    const groupsMode = (await getState(run, "catalog_mode")) === "groups";
+    const stats = slice.length ? await importItems(run as SqlRunner, slice, runTs, groupsMode) : { products: 0 };
     const cursor = from + PORTION;
 
     if (cursor < total) {

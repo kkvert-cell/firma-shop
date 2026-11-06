@@ -8,6 +8,8 @@ import { NextRequest } from "next/server";
 import { getSql } from "@/lib/db";
 import { parseItem, splitItems } from "@/lib/prom-feed";
 import { importItems, markMissing, SqlRunner } from "@/lib/prom-sync";
+import { getCatalogMode } from "@/lib/prom-groups";
+import type { Run } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -51,7 +53,8 @@ export async function GET(req: NextRequest) {
 
     const slice = items.slice(from, from + count).map(parseItem).filter((i) => i !== null);
     const sql = getSql() as unknown as SqlRunner;
-    const stats = await importItems(sql, slice, run);
+    const groupsMode = (await getCatalogMode(sql as unknown as Run)) === "groups";
+    const stats = await importItems(sql, slice, run, groupsMode);
 
     const next = from + count;
     if (next < total) {

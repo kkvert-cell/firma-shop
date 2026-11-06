@@ -1,11 +1,11 @@
 import Link from "next/link";
 import ProductCard from "@/components/ProductCard";
 import SearchBox from "@/components/SearchBox";
-import CategoryIcon from "@/components/CategoryIcon";
 import Icon from "@/components/Icon";
 import { HeroArt, PromoArt } from "@/components/BrandArt";
 import { SHOP_PHONE } from "@/lib/site";
-import { COLLECTION_KINDS, COLLECTION_TITLES, getHomeCollections, getRunner, type CollectionKind } from "@/lib/catalog";
+import GroupCards from "@/components/GroupCards";
+import { COLLECTION_KINDS, COLLECTION_TITLES, getHomeCollections, getRunner, getTopCategoriesWithChildren, type CollectionKind } from "@/lib/catalog";
 
 // force-dynamic: страница не запекается статикой при сборке (тогда список
 // категорий/остатки были бы "заморожены" на момент билда) — данные
@@ -14,18 +14,10 @@ export const dynamic = "force-dynamic";
 
 async function loadCategories() {
   try {
-    // Показываем только категории, в которых (в том числе в подкатегориях) есть видимые товары: пустые на витрине не нужны
-    const rows = (await getRunner()(
-      `SELECT c.id, c.name, c.slug FROM "Category" c
-       WHERE c."isActive" = true AND c."parentId" IS NULL
-         AND EXISTS (SELECT 1 FROM "Category" d JOIN "Product" p ON p."categoryId" = d.id
-                     WHERE (d.path = c.path OR left(d.path, length(c.path) + 3) = c.path || ' > ') AND d."isActive" = true AND p."isHidden" = false)
-       ORDER BY c."sortOrder" ASC`
-    )) as unknown as { id: string; name: string; slug: string }[];
-    return { categories: rows, error: null as string | null };
+    // Лише групи, в яких (разом з вкладеними) є видимі товари: порожні на вітрині не потрібні
+    return { categories: await getTopCategoriesWithChildren(getRunner()), error: null as string | null };
   } catch (err) {
-    // Если база временно недоступна — сайт всё равно открывается,
-    // просто без списка категорий, а не белым экраном ошибки.
+    // Якщо база тимчасово недоступна — сайт усе одно відкривається, просто без списку груп
     console.error("Не вдалося завантажити категорії:", err);
     return { categories: [], error: err instanceof Error ? err.message : String(err) };
   }
@@ -84,24 +76,13 @@ export default async function HomePage() {
         <h2 className="heading" style={{ fontSize: "var(--text-xl)", marginBottom: "var(--space-4)" }}>
           Категорії
         </h2>
-        <div className="category-grid">
-          {categories.length === 0 && (
-            <p style={{ color: "var(--color-ink-muted)" }}>
-              Категорії тимчасово недоступні.
-              {error && (
-                <span style={{ display: "block", color: "var(--color-error)", fontSize: "var(--text-sm)" }}>
-                  (тимчасово для налагодження: {error})
-                </span>
-              )}
-            </p>
-          )}
-          {categories.map((cat) => (
-            <Link key={cat.slug} href={`/catalog/${cat.slug}`} className="card category-card">
-              <span className="category-icon"><CategoryIcon name={cat.name} /></span>
-              <span>{cat.name}</span>
-            </Link>
-          ))}
-        </div>
+        {categories.length === 0 && (
+          <p style={{ color: "var(--color-ink-muted)" }}>
+            Категорії тимчасово недоступні.
+            {error && <span style={{ display: "block", color: "var(--color-error)", fontSize: "var(--text-sm)" }}>(тимчасово для налагодження: {error})</span>}
+          </p>
+        )}
+        <GroupCards groups={categories} showSubs={false} />
       </section>
 
       {/* Подборки «Акции», «Хиты», «Новинки»: пустые не показываем */}

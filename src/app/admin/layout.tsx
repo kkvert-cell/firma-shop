@@ -15,6 +15,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/products">Товари</Link>
           <Link href="/admin/categories">Категорії</Link>
           <Link href="/admin/sales">Акції</Link>
+          <Link href="/admin/groups">Групи Prom</Link>
           <Link href="/admin/tools">Інструменти</Link>
           <form action="/api/admin/logout" method="post"><button type="submit" className="link-btn">Вийти</button></form>
         </nav>

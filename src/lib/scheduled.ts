@@ -1,11 +1,11 @@
 // Автоматическая синхронизация по расписанию (Cloudflare Cron Trigger, каждые 5 минут).
-// Каждый запуск: порция остатков из KeyCRM (с запоминанием места); раз в 3 часа — ещё и артикулы из Prom.
+// Каждый запуск: порция остатков из KeyCRM (с запоминанием места). Артикулы и группы из YML Prom — раз в час, в «Prom-запуске» (runPromRefresh).
 // Только относительные импорты: этот файл собирается отдельно от Next.js.
 
 import { getSql } from "./db";
 import type { Run } from "./catalog";
 import { syncStockChunk } from "./keycrm-sync";
-import { linkArticles } from "./prom-articles";
+import { syncYml } from "./prom-groups";
 import { retryPendingOrders } from "./keycrm-orders";
 import { getState, setState } from "./sync-state";
 import { promRefreshStep } from "./prom-refresh";
@@ -25,12 +25,34 @@ export async function runPromRefresh(now: Date = new Date()) {
     console.error("[cron] Помилка обслуговування акцій:", err);
   }
   const feedUrl = process.env.PROM_FEED_URL;
-  if (!feedUrl) return;
-  try {
-    const r = await promRefreshStep(healRun(getSql() as unknown as Run), feedUrl, now, Number(process.env.PROM_REFRESH_HOURS) || 12);
-    if (r.status !== "idle") console.log("[cron] Каталог Prom:", JSON.stringify(r));
-  } catch (err) {
-    console.error("[cron] Помилка оновлення каталогу Prom:", err);
+  let idle = true;
+  if (feedUrl) {
+    try {
+      const r = await promRefreshStep(healRun(getSql() as unknown as Run), feedUrl, now, Number(process.env.PROM_REFRESH_HOURS) || 12);
+      if (r.status !== "idle") {
+        console.log("[cron] Каталог Prom:", JSON.stringify(r));
+        idle = false;
+      }
+    } catch (err) {
+      console.error("[cron] Помилка оновлення каталогу Prom:", err);
+      idle = false;
+    }
+  }
+
+  // Артикули й групи продавця з YML — раз на годину, лише коли оновлення каталогу не йде (щоб не перевищити ліміт запитів за запуск)
+  const ymlUrl = process.env.PROM_YML_URL;
+  if (ymlUrl && idle) {
+    try {
+      const run = healRun(getSql() as unknown as Run);
+      const last = Date.parse((await getState(run, "yml_last_run")) ?? "") || 0;
+      if (now.getTime() - last > 55 * 60_000) {
+        await setState(run, "yml_last_run", now.toISOString());
+        const r = await syncYml(run, ymlUrl);
+        console.log(`[cron] YML: товарів ${r.offers}, артикулів ${r.found}/${r.changed}, групи: ${JSON.stringify(r.groups)}`);
+      }
+    } catch (err) {
+      console.error("[cron] Помилка синхронізації YML:", err);
+    }
   }
 }
 
@@ -67,16 +89,6 @@ export async function runScheduled(now: Date = new Date()) {
       console.log(`[cron] KeyCRM: стр. ${r.fromPage}+${r.pagesDone}/${r.totalPages}, збіглося ${r.matched}, змінилось ${r.changed}${r.error ? ", помилка: " + r.error : ""}`);
     } catch (err) {
       console.error("[cron] Помилка синхронізації залишків:", err);
-    }
-  }
-
-  // 2) Артикули из Prom — раз в 3 часа (в первые 5 минут часа)
-  if (process.env.PROM_YML_URL && now.getUTCHours() % 3 === 0 && now.getUTCMinutes() < 5) {
-    try {
-      const r = await linkArticles(run, process.env.PROM_YML_URL);
-      console.log(`[cron] Артикули: у фіді ${r.offers}, знайдено ${r.found}, змінилось ${r.changed}`);
-    } catch (err) {
-      console.error("[cron] Помилка синхронізації артикулів:", err);
     }
   }
 }

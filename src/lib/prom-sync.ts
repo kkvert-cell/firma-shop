@@ -9,7 +9,9 @@ export type SqlRunner = (query: string, params?: unknown[]) => Promise<Record<st
 
 const j = (v: unknown) => JSON.stringify(v);
 
-export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: string) {
+// groupsMode: каталог переключён на группы продавца — категории маркетплейса не создаём и не трогаем,
+// новым товарам ставим служебную группу «Без групи», а настоящую группу им назначает синхронизация YML (prom-groups).
+export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: string, groupsMode = false) {
   // 1. Категории: каждый уровень пути ("A", "A > B", "A > B > C") — отдельная запись
   const cats = new Map<string, { name: string; slug: string; path: string; parentPath: string | null; depth: number }>();
   for (const it of items) {
@@ -27,7 +29,7 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
       }
     }
   }
-  const maxDepth = Math.max(0, ...[...cats.values()].map((c) => c.depth));
+  const maxDepth = groupsMode ? 0 : Math.max(0, ...[...cats.values()].map((c) => c.depth));
   for (let d = 1; d <= maxDepth; d++) {
     const rows = [...cats.values()].filter((c) => c.depth === d);
     await sql(
@@ -105,7 +107,7 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
   await sql(
     `INSERT INTO "Product"("sku","externalId","vendorCode","slug","name","description","categoryId","brandId","price","oldPrice","currency","isAvailable","sourceUrl","syncedAt","updatedAt")
      SELECT 'prom-' || x."externalId", x."externalId", x."vendorCode", x.slug, x.name, x.description,
-            (SELECT c.id FROM "Category" c WHERE c.path = x."categoryPath"),
+            COALESCE((SELECT c.id FROM "Category" c WHERE c.path = x."categoryPath" AND c.source = 'legacy'), (SELECT c.id FROM "Category" c WHERE c.path = 'Без групи')),
             (SELECT b.id FROM "Brand" b WHERE b.slug = x."brandSlug"),
             COALESCE(x.price, 0), x."oldPrice", x.currency, x.available, x."sourceUrl", $2::timestamp, now()
      FROM jsonb_to_recordset($1::jsonb) AS x("externalId" text, "vendorCode" text, slug text, name text, description text,
@@ -115,7 +117,7 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
        name = CASE WHEN 'name' = ANY("Product"."lockedFields") THEN "Product".name ELSE EXCLUDED.name END,
        description = CASE WHEN 'description' = ANY("Product"."lockedFields") THEN "Product".description ELSE EXCLUDED.description END,
        "vendorCode" = COALESCE("Product"."vendorCode", EXCLUDED."vendorCode"),
-       "categoryId" = CASE WHEN 'category' = ANY("Product"."lockedFields") THEN "Product"."categoryId" ELSE EXCLUDED."categoryId" END,
+       "categoryId" = CASE WHEN $3::boolean OR 'category' = ANY("Product"."lockedFields") THEN "Product"."categoryId" ELSE EXCLUDED."categoryId" END,
        "brandId" = CASE WHEN 'brand' = ANY("Product"."lockedFields") THEN "Product"."brandId" ELSE EXCLUDED."brandId" END,
        price = CASE WHEN 'price' = ANY("Product"."lockedFields") THEN "Product".price ELSE EXCLUDED.price END,
        "oldPrice" = CASE WHEN 'price' = ANY("Product"."lockedFields") THEN "Product"."oldPrice" ELSE EXCLUDED."oldPrice" END,
@@ -123,7 +125,7 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
        "isAvailable" = CASE WHEN "Product"."stockSyncedAt" IS NOT NULL THEN "Product"."isAvailable" ELSE EXCLUDED."isAvailable" END,
        "sourceUrl" = EXCLUDED."sourceUrl",
        "syncedAt" = EXCLUDED."syncedAt", "updatedAt" = now()`,
-    [j([...products.values()]), runTs]
+    [j([...products.values()]), runTs, groupsMode]
   );
 
   // 3а. Акції, які сайт уже завершив за строком: якщо Prom усе ще віддає ту саму знижку — лишаємо звичайну ціну.

@@ -1,6 +1,8 @@
 import RichText from "@/components/RichText";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
+import SmartImage from "@/components/SmartImage";
+import { thumb } from "@/lib/image";
 import type { Metadata } from "next";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import ProductCard from "@/components/ProductCard";
@@ -67,7 +69,17 @@ export default async function CategoryPage({ params, searchParams }: Props) {
       </main>
     );
   }
-  if (!data) notFound();
+  if (!data) {
+    // Стара адреса категорії (до переходу на групи продавця) → найближча нова група
+    try {
+      const r = await getRunner()(`SELECT "newPath" FROM "Redirect" WHERE "oldPath" = $1 AND "newPath" IS NOT NULL LIMIT 1`, [`/catalog/${category}`]);
+      if (r[0]?.newPath) permanentRedirect(String(r[0].newPath));
+    } catch (err) {
+      if (err && typeof err === "object" && "digest" in err) throw err; // службова помилка перенаправлення Next.js
+      console.error("Помилка пошуку переспрямування:", err);
+    }
+    notFound();
+  }
 
   const { cat, crumbs, subs, list, facets, labels } = data;
   const basePath = `/catalog/${cat.slug}`;
@@ -129,13 +141,15 @@ export default async function CategoryPage({ params, searchParams }: Props) {
       <p className="muted">{list.total} {plural(list.total, ["товар", "товари", "товарів"])}</p>
 
       {subs.length > 0 && (
-        <div className="subcategories">
+        <nav className="sub-tiles" aria-label="Підгрупи">
           {subs.map((s) => (
-            <Link key={s.id} href={`/catalog/${s.slug}`} className="chip">
-              {s.name} <span className="n">{s.n}</span>
+            <Link key={s.id} href={`/catalog/${s.slug}`} className="sub-tile">
+              <span className="sub-tile-img">{s.image ? <SmartImage src={thumb(s.image, 120)} fallback={s.image} alt="" /> : null}</span>
+              <span className="sub-tile-name">{s.name}</span>
+              <span className="sub-tile-n">{s.n}</span>
             </Link>
           ))}
-        </div>
+        </nav>
       )}
 
       <div className="tick-divider" style={{ margin: "var(--space-4) 0" }} />

@@ -6,6 +6,7 @@ import { cache } from "react";
 import { healRun } from "./schema-heal";
 import { OLD_PRICE_SQL, SALE_ACTIVE, SALE_UNTIL_SQL } from "./sales";
 import { getSql } from "./db";
+import { findNode, flattenTree, getCatalogTree } from "./catalog-tree";
 
 export type Row = Record<string, unknown>;
 export type Run = (query: string, params?: unknown[]) => Promise<Row[]>;
@@ -24,7 +25,7 @@ export type CategoryInfo = {
   seoDescription: string | null;
 };
 export type Crumb = { name: string; slug: string };
-export type SubCategory = { id: string; name: string; slug: string; n: number };
+export type SubCategory = { id: string; name: string; slug: string; n: number; image?: string | null };
 
 export type ProductCardData = {
   id: string;
@@ -134,36 +135,20 @@ export async function getBreadcrumbs(run: Run, path: string): Promise<Crumb[]> {
 }
 
 export async function getSubcategories(run: Run, parentId: string): Promise<SubCategory[]> {
-  const rows = await run(
-    `SELECT c.id, c.name, c.slug, count(p.id)::int AS n
-     FROM "Category" c
-     LEFT JOIN "Category" d ON (d.path = c.path OR left(d.path, length(c.path) + 3) = c.path || ' > ') AND d."isActive" = true
-     LEFT JOIN "Product" p ON p."categoryId" = d.id AND p."isHidden" = false
-     WHERE c."parentId" = $1 AND c."isActive" = true
-     GROUP BY c.id, c.name, c.slug, c."sortOrder"
-     ORDER BY c."sortOrder", c.name`,
-    [parentId]
-  );
-  return (rows as SubCategory[]).filter((r) => r.n > 0);
+  const node = findNode(await getCatalogTree(run), parentId);
+  return (node?.children ?? []).map((c) => ({ id: c.id, name: c.name, slug: c.slug, n: c.n, image: c.image }));
 }
 
+// Головні групи з підгрупами першого рівня (порожні групи не показуються)
 export async function getTopCategoriesWithChildren(run: Run) {
-  const rows = await run(
-    `SELECT c.id, c.name, c.slug, c."parentId"
-     FROM "Category" c WHERE c."isActive" = true AND c.path IS NOT NULL
-       AND (c."parentId" IS NULL OR c."parentId" IN (SELECT id FROM "Category" WHERE "parentId" IS NULL))
-       AND EXISTS (SELECT 1 FROM "Category" d JOIN "Product" p ON p."categoryId" = d.id
-                   WHERE (d.path = c.path OR left(d.path, length(c.path) + 3) = c.path || ' > ') AND d."isActive" = true AND p."isHidden" = false)
-     ORDER BY c."sortOrder", c.name`
-  );
-  const tops = rows.filter((r) => r.parentId === null);
-  return tops.map((t) => ({
-    id: String(t.id),
-    name: String(t.name),
-    slug: String(t.slug),
-    children: rows
-      .filter((r) => r.parentId === t.id)
-      .map((r) => ({ id: String(r.id), name: String(r.name), slug: String(r.slug) })),
+  const tree = await getCatalogTree(run);
+  return tree.map((t) => ({
+    id: t.id,
+    name: t.name,
+    slug: t.slug,
+    n: t.n,
+    image: t.image,
+    children: t.children.map((c) => ({ id: c.id, name: c.name, slug: c.slug, n: c.n })),
   }));
 }
 
@@ -402,12 +387,12 @@ export async function getProductBySlug(run: Run, slug: string) {
 // ---------- Для карты сайта ----------
 
 export async function getSitemapData(run: Run) {
-  const [cats, prods] = await Promise.all([
-    run(`SELECT slug FROM "Category" WHERE "isActive" = true AND path IS NOT NULL ORDER BY path`),
+  const [tree, prods] = await Promise.all([
+    getCatalogTree(run),
     run(`SELECT slug, "updatedAt" FROM "Product" WHERE "isHidden" = false ORDER BY id`),
   ]);
   return {
-    categories: cats.map((r) => String(r.slug)),
+    categories: flattenTree(tree).map((c) => c.slug), // порожні групи в карту сайту не потрапляють
     products: prods.map((r) => ({ slug: String(r.slug), updatedAt: new Date(r.updatedAt as string) })),
   };
 }
@@ -456,7 +441,8 @@ const SALES_JOIN = `LEFT JOIN (
 const NEW_DAYS = 30;
 const NOT_GLASSES = `p.name !~* '\\m(окуляр|очк[иіа]|очков|очків|glasses|blue[ -]?block)'`;
 
-const COLLECTIONS: Record<CollectionKind, { from: string; where: string; order: string }> = {
+// anyStock: на странице подборки показывать и товары, которых сейчас нет в наличии (в конце списка); pageOrder: порядок на странице подборки
+const COLLECTIONS: Record<CollectionKind, { from: string; where: string; order: string; anyStock?: boolean; pageOrder?: string }> = {
   sale: {
     from: "",
     // Лише акції, що діють зараз (є стара ціна й не минув строк). Ручна відмітка «Акція» без діючої знижки більше нічого не показує.
@@ -472,19 +458,24 @@ const COLLECTIONS: Record<CollectionKind, { from: string; where: string; order: 
     from: "",
     where: `(${NOT_GLASSES}) AND ('new' = ANY(p."homeFlags") OR (p."createdAt" > now() - interval '${NEW_DAYS} days' AND p."createdAt" > (SELECT min("createdAt") FROM "Product") + interval '1 day'))`,
     order: `('new' = ANY(p."homeFlags")) DESC, p."createdAt" DESC, p.id ASC`,
+    // Новинка остаётся в подборке весь месяц, даже если остаток в KeyCRM временно нулевой: на странице такие товары идут в конце списка
+    anyStock: true,
+    pageOrder: `p."isAvailable" DESC, ('new' = ANY(p."homeFlags")) DESC, p."createdAt" DESC, p.id ASC`,
   },
 };
 
 const SHOWABLE = `p."isHidden" = false AND p."isAvailable" = true AND p.price > 0`;
+const SHOWABLE_ANY_STOCK = `p."isHidden" = false AND p.price > 0`;
 const CARD_COLS = `p.id, p.name, p.slug, p.price::float8 AS price, ${OLD_PRICE_SQL}, ${SALE_UNTIL_SQL}, p."isAvailable", p."vendorCode",
        (SELECT i.url FROM "ProductImage" i WHERE i."productId" = p.id ORDER BY i."sortOrder" LIMIT 1) AS image`;
 
 export async function listCollection(run: Run, kind: CollectionKind, page: number, perPage = PER_PAGE): Promise<{ items: ProductCardData[]; total: number }> {
   const c = COLLECTIONS[kind];
+  const showable = c.anyStock ? SHOWABLE_ANY_STOCK : SHOWABLE;
   const [count, rows] = await Promise.all([
-    run(`SELECT count(*)::int AS n FROM "Product" p ${c.from} WHERE ${SHOWABLE} AND ${c.where}`),
+    run(`SELECT count(*)::int AS n FROM "Product" p ${c.from} WHERE ${showable} AND ${c.where}`),
     run(
-      `SELECT ${CARD_COLS} FROM "Product" p ${c.from} WHERE ${SHOWABLE} AND ${c.where} ORDER BY ${c.order} LIMIT ${perPage} OFFSET ${(Math.max(1, page) - 1) * perPage}`
+      `SELECT ${CARD_COLS} FROM "Product" p ${c.from} WHERE ${showable} AND ${c.where} ORDER BY ${c.pageOrder ?? c.order} LIMIT ${perPage} OFFSET ${(Math.max(1, page) - 1) * perPage}`
     ),
   ]);
   return { items: rows as ProductCardData[], total: Number(count[0]?.n ?? 0) };

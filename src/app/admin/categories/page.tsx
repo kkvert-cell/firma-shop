@@ -38,9 +38,10 @@ export default async function AdminCategories({ searchParams }: { searchParams: 
           <li key={c.id}>
             <Link href={`/admin/categories/${c.id}`} className="adm-row" style={{ marginLeft: `${Math.min(c.depth, 4) * 14}px` }}>
               <span className="adm-row-main">{c.name}</span>
-              <span className="adm-row-sub">товарів напряму: {c.n}</span>
+              <span className="adm-row-sub">товарів напряму: {c.n}{c.nameSource && c.nameSource !== c.name ? ` · у Prom: ${c.nameSource}` : ""}</span>
               <span className="adm-chips">
                 {!c.isActive && <span className="chip bad">приховано</span>}
+                {c.nameAuto && <span className="chip warn">перевірте переклад</span>}
                 {c.lockedFields.length > 0 && <span className="chip mute">змінено вручну</span>}
               </span>
             </Link>

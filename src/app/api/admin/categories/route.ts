@@ -1,6 +1,7 @@
 // Изменения категорий из админки. Форма отправляет поле op: create | save | unlock | delete | products
 import { NextRequest, NextResponse } from "next/server";
 import { apiAdminOk } from "@/lib/admin-auth";
+import { invalidateCatalogTree } from "@/lib/catalog-tree";
 import { getRunner } from "@/lib/catalog";
 import { ID_RE, addLocks, oneLine, text, uniqueSlug } from "@/lib/admin-catalog";
 
@@ -10,6 +11,7 @@ const go = (req: NextRequest, path: string, q: string) => NextResponse.redirect(
 const err = (req: NextRequest, path: string, msg: string) => go(req, path, `err=${encodeURIComponent(msg)}`);
 
 export async function POST(req: NextRequest) {
+  invalidateCatalogTree();
   if (!apiAdminOk(req)) return new NextResponse("Forbidden", { status: 403 });
   const f = await req.formData();
   const op = String(f.get("op") ?? "");
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!ID_RE.test(id)) return new NextResponse("Bad request", { status: 400 });
-    const cur = (await run(`SELECT name, "isActive", "lockedFields" FROM "Category" WHERE id = $1`, [id]))[0];
+    const cur = (await run(`SELECT name, "isActive", "lockedFields", "sortOrder" FROM "Category" WHERE id = $1`, [id]))[0];
     if (!cur) return new NextResponse("Not found", { status: 404 });
 
     // ---------- Сохранить ----------
@@ -54,8 +56,9 @@ export async function POST(req: NextRequest) {
       const changed: string[] = [];
       if (name !== String(cur.name)) changed.push("name");
       if (visible !== Boolean(cur.isActive)) changed.push("visibility");
-      const locks = addLocks((cur.lockedFields as string[]) ?? [], changed);
       const sort = Number.parseInt(String(f.get("sortOrder") ?? "0"), 10);
+      if (Number.isFinite(sort) && sort !== Number(cur.sortOrder)) changed.push("sort");
+      const locks = addLocks((cur.lockedFields as string[]) ?? [], changed);
       await run(
         `UPDATE "Category" SET name = $2, "isActive" = $3, description = $4, "seoTitle" = $5, "seoDescription" = $6, "sortOrder" = $7, "lockedFields" = $8::text[] WHERE id = $1`,
         [id, name, visible, text(f.get("description"), 20000) || null, oneLine(f.get("seoTitle"), 200) || null, oneLine(f.get("seoDescription"), 400) || null, Number.isFinite(sort) ? Math.max(-9999, Math.min(9999, sort)) : 0, locks]
@@ -66,7 +69,7 @@ export async function POST(req: NextRequest) {
     // ---------- Вернуть из Prom ----------
     if (op === "unlock") {
       const field = String(f.get("field") ?? "");
-      if (!["name", "visibility"].includes(field)) return new NextResponse("Bad request", { status: 400 });
+      if (!["name", "visibility", "sort"].includes(field)) return new NextResponse("Bad request", { status: 400 });
       await run(`UPDATE "Category" SET "lockedFields" = array_remove("lockedFields", $2) WHERE id = $1`, [id, field]);
       return go(req, back, "ok=unlocked");
     }

@@ -35,7 +35,11 @@ export async function proxy(request: NextRequest) {
       return NextResponse.next(); // товара больше нет — обычная страница 404
     }
 
-    // 3) категория без записи в таблице: ведём в каталог (временно, чтобы позже можно было уточнить)
+    // 3) группа продавца: номер в старой ссылке (/g93431534-…) совпадает с номером группы в YML
+    const grp = (await sql`SELECT slug FROM "Category" WHERE "promId" = ${id} AND "isActive" = true LIMIT 1`) as { slug: string }[];
+    if (grp[0]) return NextResponse.redirect(new URL(`/catalog/${grp[0].slug}`, request.url), 301);
+
+    // 4) категория без записи в таблице: ведём в каталог (временно, чтобы позже можно было уточнить)
     return NextResponse.redirect(new URL("/catalog", request.url), 302);
   } catch (err) {
     console.error("Помилка перевірки редіректу:", err);

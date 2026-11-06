@@ -5,7 +5,7 @@
 import { NextRequest } from "next/server";
 import { getSql } from "@/lib/db";
 import type { Run } from "@/lib/catalog";
-import { linkArticles } from "@/lib/prom-articles";
+import { syncYml } from "@/lib/prom-groups";
 import { checkKey, esc, htmlPage } from "@/lib/sync-page";
 
 export const dynamic = "force-dynamic";
@@ -17,10 +17,11 @@ export async function GET(req: NextRequest) {
   if (!feedUrl) return htmlPage("<h3>Не задано PROM_YML_URL</h3><p>Додайте секрет у Cloudflare (посилання на products_feed.xml).</p>", 500);
 
   try {
-    const r = await linkArticles(getSql() as unknown as Run, feedUrl);
+    const r = await syncYml(getSql() as unknown as Run, feedUrl);
     const key = encodeURIComponent(req.nextUrl.searchParams.get("key") ?? "");
     return htmlPage(`<h3>Готово ✅</h3>
       <p>Товарів у фіді: ${r.offers}. Знайдено артикулів: ${r.found}. Оновлено в базі: ${r.changed}.</p>
+      <p>Групи Prom: ${r.groups.skipped ? esc(r.groups.skipped) : `${r.groups.groups} груп, товарів прив’язано: ${r.groups.assigned}`}.</p>
       <p><a href="/api/sync/keycrm?key=${key}" style="font-size:20px">Далі: залишки з KeyCRM →</a></p>`);
   } catch (e) {
     return htmlPage(`<h3>Помилка</h3><pre style="white-space:pre-wrap">${esc(e instanceof Error ? e.message : String(e))}</pre>`, 500);
