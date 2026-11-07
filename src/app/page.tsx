@@ -5,6 +5,7 @@ import Icon from "@/components/Icon";
 import { HeroArt, PromoArt } from "@/components/BrandArt";
 import { SHOP_PHONE } from "@/lib/site";
 import GroupCards from "@/components/GroupCards";
+import HomeCollections from "@/components/HomeCollections";
 import { COLLECTION_KINDS, COLLECTION_TITLES, getHomeCollections, getRunner, getTopCategoriesWithChildren, type CollectionKind } from "@/lib/catalog";
 
 // force-dynamic: страница не запекается статикой при сборке (тогда список
@@ -34,6 +35,7 @@ async function loadCollections() {
 
 export default async function HomePage() {
   const [{ categories, error }, collections] = await Promise.all([loadCategories(), loadCollections()]);
+  const nonEmpty = collections ? COLLECTION_KINDS.filter((k: CollectionKind) => collections[k].length > 0) : [];
   return (
     <main>
       {/* Главный баннер: поиск — то, чем реально будут пользоваться в первую очередь */}
@@ -85,19 +87,19 @@ export default async function HomePage() {
         <GroupCards groups={categories} showSubs={false} />
       </section>
 
-      {/* Подборки «Акции», «Хиты», «Новинки»: пустые не показываем */}
-      {collections &&
-        COLLECTION_KINDS.filter((k: CollectionKind) => collections[k].length > 0).map((k: CollectionKind) => (
-          <section key={k} className="home-block">
-            <div className="home-block-head">
-              <h2 className="heading" style={{ fontSize: "var(--text-xl)" }}>{COLLECTION_TITLES[k]}</h2>
-              <Link href={`/collection/${k}`}>Усі →</Link>
-            </div>
-            <div className="product-row">
-              {collections[k].map((p) => <ProductCard key={p.id} p={p} />)}
-            </div>
-          </section>
-        ))}
+      {/* Підбірки «Акції», «Хіти», «Новинки»: порожні не показуємо. Якщо непорожня лише одна — старий вигляд зі стрічкою */}
+      {collections && nonEmpty.length >= 2 && <HomeCollections data={collections} kinds={nonEmpty} />}
+      {collections && nonEmpty.length === 1 && nonEmpty.map((k: CollectionKind) => (
+        <section key={k} className="home-block">
+          <div className="home-block-head">
+            <h2 className="heading" style={{ fontSize: "var(--text-xl)" }}>{COLLECTION_TITLES[k]}</h2>
+            <Link href={`/collection/${k}`}>Усі →</Link>
+          </div>
+          <div className="product-row">
+            {collections[k].map((p) => <ProductCard key={p.id} p={p} />)}
+          </div>
+        </section>
+      ))}
 
       <div className="tick-divider" style={{ margin: "var(--space-8) 0" }} />
 
