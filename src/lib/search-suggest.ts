@@ -43,7 +43,8 @@ export async function suggest(run: Run, q: string, limit = 6): Promise<Suggestio
        FROM "Category" c
        WHERE c."isActive" = true AND c.path IS NOT NULL AND ${catWhere}
          AND EXISTS (SELECT 1 FROM "Category" d JOIN "Product" p ON p."categoryId" = d.id
-                     WHERE (d.path = c.path OR left(d.path, length(c.path) + 3) = c.path || ' > ') AND p."isHidden" = false)
+                     WHERE (d.path = c.path OR left(d.path, length(c.path) + 3) = c.path || ' > ') AND d."isActive" = true
+                       AND p."isHidden" = false AND p."isAvailable" = true AND p.price > 0)
        ORDER BY (c.name ILIKE $${startN}) DESC, length(c.path) ASC, c.name ASC
        LIMIT 3`,
       params

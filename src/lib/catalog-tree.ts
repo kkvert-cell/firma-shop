@@ -1,5 +1,6 @@
 // Дерево каталогу для меню, сторінки «Каталог», головної, підгруп і карти сайту.
-// Рахує товари з урахуванням усіх вкладених підгруп; порожні групи в дерево не потрапляють.
+// Рахує товари В НАЯВНОСТІ з урахуванням усіх вкладених підгруп; групи, де немає жодного товару в наявності, в дерево не потрапляють
+// (на сторінку такої групи за прямим посиланням зайти можна, але в меню, картках, підгрупах і карті сайту її немає).
 // Результат на короткий час кешується в пам'яті (дерево змінюється рідко, а меню потрібне на кожній сторінці).
 
 import type { Run } from "./catalog";
@@ -26,7 +27,7 @@ export async function getCatalogTree(run: Run): Promise<TreeNode[]> {
   if (cache && Date.now() - cache.at < TTL_MS) return cache.tree;
   const [cats, counts, images] = await Promise.all([
     run(`SELECT id, name, slug, path, "parentId", "imageUrl" FROM "Category" WHERE "isActive" = true AND path IS NOT NULL ORDER BY "sortOrder", name`),
-    run(`SELECT "categoryId" AS id, count(*)::int AS n FROM "Product" WHERE "isHidden" = false GROUP BY "categoryId"`),
+    run(`SELECT "categoryId" AS id, count(*)::int AS n FROM "Product" WHERE "isHidden" = false AND "isAvailable" = true AND price > 0 GROUP BY "categoryId"`),
     run(
       `SELECT DISTINCT ON (p."categoryId") p."categoryId" AS id, i.url
          FROM "Product" p JOIN "ProductImage" i ON i."productId" = p.id

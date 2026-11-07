@@ -7,7 +7,7 @@
 
 import type { Run } from "./catalog";
 import { getState, setState } from "./sync-state";
-import { toUkrainian } from "./ru-uk";
+import { NAME_FIXES, toUkrainian } from "./ru-uk";
 import { slugify } from "./prom-feed";
 import { applyVendorCodes, scanYml, type YmlScan } from "./prom-articles";
 
@@ -156,6 +156,7 @@ export async function applyGroups(run: Run, scan: YmlScan, mode: CatalogMode): P
     );
   }
 
+  await applyNameFixes(run);
   const review = n(await run(`SELECT count(*)::int AS n FROM "Category" WHERE source = 'group' AND "inFeed" AND "nameAuto"`));
   const res: GroupsResult = { groups: outs.size, assigned, review, hiddenByRule, goneFromFeed: gone };
   await setState(run, "groups_last_sync", new Date().toISOString());
@@ -182,6 +183,26 @@ async function recomputePaths(run: Run) {
        UNION ALL SELECT c.id, t.np || ' > ' || c.name FROM "Category" c JOIN t ON c."parentId" = t.id WHERE c.source = 'group')
      UPDATE "Category" c SET path = t.np FROM t WHERE c.id = t.id AND c.path <> t.np`
   );
+}
+
+// Виправлені назви груп (список NAME_FIXES): якщо назва групи ще не змінювалася вручну й збігається зі старим автопереказом,
+// ставимо правильну й блокуємо від перезапису. Повертає кількість змінених груп.
+export async function applyNameFixes(run: Run): Promise<number> {
+  const rows = Object.entries(NAME_FIXES).map(([old, fixed]) => ({ old, fixed }));
+  const changed = n(
+    await run(
+      `WITH u AS (
+         UPDATE "Category" c SET name = x.fixed, "nameAuto" = false,
+                "lockedFields" = CASE WHEN 'name' = ANY(c."lockedFields") THEN c."lockedFields" ELSE array_append(c."lockedFields", 'name') END
+           FROM jsonb_to_recordset($1::jsonb) AS x(old text, fixed text)
+          WHERE c.source = 'group' AND c.name = x.old AND NOT ('name' = ANY(c."lockedFields"))
+          RETURNING 1)
+       SELECT count(*)::int AS n FROM u`,
+      [JSON.stringify(rows)]
+    )
+  );
+  if (changed > 0) await recomputePaths(run).catch(() => {});
+  return changed;
 }
 
 export async function switchToGroups(run: Run): Promise<{ moved: number; redirects: number }> {
