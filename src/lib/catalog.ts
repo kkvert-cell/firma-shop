@@ -139,6 +139,12 @@ export async function getSubcategories(run: Run, parentId: string): Promise<SubC
   return (node?.children ?? []).map((c) => ({ id: c.id, name: c.name, slug: c.slug, n: c.n, image: c.image }));
 }
 
+// Скільки товарів у групі (з підгрупами) зараз у наявності — те саме число, що на картках і в меню
+export async function getInStockCount(run: Run, categoryId: string): Promise<number> {
+  const node = findNode(await getCatalogTree(run), categoryId);
+  return node?.n ?? 0;
+}
+
 // Головні групи з підгрупами першого рівня (порожні групи не показуються)
 export async function getTopCategoriesWithChildren(run: Run) {
   const tree = await getCatalogTree(run);
@@ -243,6 +249,8 @@ export type FacetPrice = { min: number | null; max: number | null };
 export async function getFacets(run: Run, categoryId: string): Promise<{ brands: FacetBrand[]; attributes: FacetAttr[]; price: FacetPrice }> {
   const params: unknown[] = [];
   const { cte, where } = baseWhere({ type: "category", categoryId }, params);
+  // Фільтри будуємо лише з товарів у наявності: так у списку немає значень від товарів, яких покупець усе одно не купить
+  where.push(`p."isAvailable" = true`);
   const whereSql = `WHERE ${where.join(" AND ")}`;
 
   const [brandRows, attrRows, totalRows, priceRows] = await Promise.all([
@@ -281,7 +289,12 @@ export async function getFacets(run: Run, categoryId: string): Promise<{ brands:
 
   // Полезный фильтр: есть из чего выбирать (2..30 значений) и охватывает заметную часть товаров.
   const minCoverage = Math.max(3, Math.floor(totalProducts * 0.15));
+  // Рідкісні значення (1 товар) у великих списках — це здебільшого сміття з карток Prom («Побутової», «Гладкий»…): ховаємо їх
   const attributes = [...byAttr.values()]
+    .map((a) => {
+      const common = a.values.filter((v) => v.n >= 2);
+      return common.length >= 2 && a.values.length > 4 ? { ...a, values: common } : a;
+    })
     .filter((a) => a.values.length >= 2 && a.values.length <= 30 && a.total >= minCoverage)
     .sort((x, y) => y.total - x.total)
     .slice(0, 4)

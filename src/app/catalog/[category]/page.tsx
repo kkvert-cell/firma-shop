@@ -11,7 +11,7 @@ import FilterPanel from "@/components/FilterPanel";
 import { SITE_URL, SITE_NAME, formatPrice, plural } from "@/lib/site";
 import { jsonLd, breadcrumbJsonLd } from "@/lib/seo";
 import {
-  getRunner, loadCategory, getBreadcrumbs, getSubcategories, listProducts, getFacets, getFilterLabels,
+  getRunner, loadCategory, getBreadcrumbs, getSubcategories, getInStockCount, listProducts, getFacets, getFilterLabels,
   parseListParams, toQuery, hasActiveFilters, PER_PAGE, SORT_LABELS,
   type ListParams, type SortKey,
 } from "@/lib/catalog";
@@ -44,14 +44,15 @@ async function loadData(slug: string, lp: ListParams) {
   const cat = await loadCategory(slug);
   if (!cat) return null;
   const run = getRunner();
-  const [crumbs, subs, list, facets, labels] = await Promise.all([
+  const [crumbs, subs, list, facets, labels, inStockN] = await Promise.all([
     getBreadcrumbs(run, cat.path),
     getSubcategories(run, cat.id),
     listProducts(run, { type: "category", categoryId: cat.id }, lp),
     getFacets(run, cat.id),
     getFilterLabels(run, lp.filters),
+    getInStockCount(run, cat.id),
   ]);
-  return { cat, crumbs, subs, list, facets, labels };
+  return { cat, crumbs, subs, list, facets, labels, inStockN };
 }
 
 export default async function CategoryPage({ params, searchParams }: Props) {
@@ -81,7 +82,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     notFound();
   }
 
-  const { cat, crumbs, subs, list, facets, labels } = data;
+  const { cat, crumbs, subs, list, facets, labels, inStockN } = data;
   const basePath = `/catalog/${cat.slug}`;
   const hrefWith = (next: ListParams) => {
     const s = toQuery(next).toString();
@@ -138,7 +139,10 @@ export default async function CategoryPage({ params, searchParams }: Props) {
       />
 
       <h1 className="heading page-title">{cat.name}</h1>
-      <p className="muted">{list.total} {plural(list.total, ["товар", "товари", "товарів"])}</p>
+      <p className="muted">
+        {list.total} {plural(list.total, ["товар", "товари", "товарів"])}
+        {!hasActiveFilters(lp) && inStockN > 0 && inStockN < list.total ? ` · у наявності: ${inStockN}` : ""}
+      </p>
 
       {subs.length > 0 && (
         <nav className="sub-tiles" aria-label="Підгрупи">
