@@ -4,6 +4,7 @@ import { thumb } from "@/lib/image";
 import { formatPrice } from "@/lib/site";
 import { COLLECTION_TITLES, COLLECTION_ALL_LABELS } from "@/lib/collections-ui";
 import type { ProductCardData } from "@/lib/catalog";
+import { BF_TO_TEXT } from "@/lib/blackfriday";
 
 type Kind = "sale" | "hits" | "new";
 const PER_COLUMN = 4;
@@ -38,7 +39,7 @@ function Row({ p, kind }: { p: ProductCardData; kind: Kind }) {
 }
 
 // Три підбірки в один ряд (на комп'ютері) або вкладками (на телефоні). Порожні підбірки не показуються.
-export default function HomeCollections({ data, kinds }: { data: Record<Kind, ProductCardData[]>; kinds: Kind[] }) {
+export default function HomeCollections({ data, kinds, bf = false }: { data: Record<Kind, ProductCardData[]>; kinds: Kind[]; bf?: boolean }) {
   const shown = kinds.filter((k) => data[k].length > 0);
   if (shown.length === 0) return null;
   return (
@@ -48,14 +49,15 @@ export default function HomeCollections({ data, kinds }: { data: Record<Kind, Pr
       ))}
       <div className="hc-tabs" role="presentation">
         {shown.map((k, i) => (
-          <label key={k} htmlFor={`hc-r-${k}`} className={`hc-tab hc-tab-${i}`}>{k === "hits" ? "Хіти" : COLLECTION_TITLES[k]}</label>
+          <label key={k} htmlFor={`hc-r-${k}`} className={`hc-tab hc-tab-${i}${bf && k === "sale" ? " hc-tab-bf" : ""}`}>{k === "hits" ? "Хіти" : COLLECTION_TITLES[k]}</label>
         ))}
       </div>
       <div className="hc-cols">
         {shown.map((k, i) => (
-          <div key={k} className={`hc-col hc-col-${i}`}>
+          <div key={k} className={`hc-col hc-col-${i}${bf && k === "sale" ? " hc-col-bf" : ""}`}>
             <div className="hc-col-head">
-              <h2 className="heading">{COLLECTION_TITLES[k]}</h2>
+              <h2 className="heading">{bf && k === "sale" ? "Чорна п'ятниця" : COLLECTION_TITLES[k]}</h2>
+              {bf && k === "sale" && <span className="hc-bf-until">до {BF_TO_TEXT}</span>}
             </div>
             {data[k].slice(0, PER_COLUMN).map((p) => <Row key={p.id} p={p} kind={k} />)}
             <Link href={`/collection/${k}`} className="hc-more">{COLLECTION_ALL_LABELS[k]} →</Link>

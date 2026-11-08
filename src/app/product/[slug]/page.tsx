@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isBlackFriday, BF_TERMS_HREF } from "@/lib/blackfriday";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import Breadcrumbs from "@/components/Breadcrumbs";
@@ -93,6 +94,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
             <p className="sale-period">
               Акційна ціна діє {p.saleFrom ? `з ${p.saleFrom} ` : ""}до {p.saleUntil} включно (інтернет-магазин {SITE_NAME}). Попередня ціна — найнижча за останні 30 днів.{" "}
               <Link href="/info/akcii">Умови акцій</Link>
+              {isBlackFriday() && <> · <Link href={BF_TERMS_HREF}>Умови «Чорної п&apos;ятниці»</Link></>}
             </p>
           )}
 

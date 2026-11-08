@@ -12,7 +12,7 @@ export default function SiteFooter() {
         <span className="brand-text"><small>FIRMA</small><b>VYMIR</b></span>
       </div>
       <nav aria-label="Умови">
-        {legalPages().map((p) => (
+        {legalPages().filter((p) => p.slug !== "black-friday").map((p) => (
           <Link key={p.slug} href={`/info/${p.slug}`}>{p.title.replace(" (договір купівлі-продажу)", "")}</Link>
         ))}
       </nav>

@@ -6,6 +6,8 @@ import { HeroArt, PromoArt } from "@/components/BrandArt";
 import { SHOP_PHONE } from "@/lib/site";
 import GroupCards from "@/components/GroupCards";
 import HomeCollections from "@/components/HomeCollections";
+import BlackFridayBanner from "@/components/BlackFridayBanner";
+import { isBlackFriday } from "@/lib/blackfriday";
 import { COLLECTION_KINDS, COLLECTION_TITLES, getHomeCollections, getRunner, getTopCategoriesWithChildren, type CollectionKind } from "@/lib/catalog";
 
 // force-dynamic: страница не запекается статикой при сборке (тогда список
@@ -35,9 +37,10 @@ async function loadCollections() {
 
 export default async function HomePage() {
   const [{ categories, error }, collections] = await Promise.all([loadCategories(), loadCollections()]);
+  const bf = isBlackFriday();
   const nonEmpty = collections ? COLLECTION_KINDS.filter((k: CollectionKind) => collections[k].length > 0) : [];
   return (
-    <main>
+    <main className={bf ? "bf-on" : undefined}>
       {/* Главный баннер: поиск — то, чем реально будут пользоваться в первую очередь */}
       <section className="hero-banner">
         <HeroArt />
@@ -48,16 +51,18 @@ export default async function HomePage() {
           <SearchBox className="search-bar" placeholder="Наприклад: штангенциркуль 150 мм" />
           <div className="hero-actions">
             <Link href="/catalog" className="btn-light">Каталог</Link>
-            {collections && collections.sale.length > 0 && <Link href="/collection/sale" className="btn-ghost">Акції</Link>}
+            {collections && collections.sale.length > 0 && <Link href="/collection/sale" className="btn-ghost">{bf ? "Чорна п'ятниця" : "Акції"}</Link>}
           </div>
         </div>
       </section>
 
+      {bf && collections && collections.sale.length > 0 && <BlackFridayBanner variant="home" />}
+
       {/* Промо-баннери: ведут на готовые страницы сайта */}
       <section className="promo-grid" aria-label="Пропозиції">
         {collections && collections.sale.length > 0 && (
-          <Link href="/collection/sale" className="promo promo-sale">
-            <span className="promo-text"><strong>Акції та знижки</strong><span>Товари зі зниженою ціною</span></span>
+          <Link href="/collection/sale" className={bf ? "promo promo-sale promo-bf" : "promo promo-sale"}>
+            <span className="promo-text"><strong>{bf ? "Чорна п'ятниця" : "Акції та знижки"}</strong><span>{bf ? "Знижки до 29.11" : "Товари зі зниженою ціною"}</span></span>
             <PromoArt kind="sale" />
           </Link>
         )}
@@ -88,7 +93,7 @@ export default async function HomePage() {
       </section>
 
       {/* Підбірки «Акції», «Хіти», «Новинки»: порожні не показуємо. Якщо непорожня лише одна — старий вигляд зі стрічкою */}
-      {collections && nonEmpty.length >= 2 && <HomeCollections data={collections} kinds={nonEmpty} />}
+      {collections && nonEmpty.length >= 2 && <HomeCollections data={collections} kinds={nonEmpty} bf={bf} />}
       {collections && nonEmpty.length === 1 && nonEmpty.map((k: CollectionKind) => (
         <section key={k} className="home-block">
           <div className="home-block-head">

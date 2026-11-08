@@ -4,6 +4,8 @@ import type { Metadata } from "next";
 import Breadcrumbs from "@/components/Breadcrumbs";
 import ProductCard from "@/components/ProductCard";
 import Pagination from "@/components/Pagination";
+import BlackFridayBanner from "@/components/BlackFridayBanner";
+import { isBlackFriday } from "@/lib/blackfriday";
 import { plural } from "@/lib/site";
 import { COLLECTION_DESCRIPTIONS, COLLECTION_KINDS, COLLECTION_TITLES, PER_PAGE, getRunner, listCollection, type CollectionKind } from "@/lib/catalog";
 
@@ -33,15 +35,16 @@ export default async function CollectionPage({ params, searchParams }: Props) {
     console.error("Помилка підбірки:", err);
   }
 
+  const bf = kind === "sale" && isBlackFriday();
   return (
-    <main>
-      <Breadcrumbs items={[{ name: COLLECTION_TITLES[kind] }]} />
-      <h1 className="heading page-title">{COLLECTION_TITLES[kind]}</h1>
+    <main className={bf ? "bf-on" : undefined}>
+      <Breadcrumbs items={[{ name: bf ? "Чорна п'ятниця" : COLLECTION_TITLES[kind] }]} />
+      {bf ? <BlackFridayBanner variant="page" /> : <h1 className="heading page-title">{COLLECTION_TITLES[kind]}</h1>}
       {!result && <p className="empty-state">Сторінка тимчасово недоступна. Спробуйте за хвилину.</p>}
       {result && (
         <>
           <p className="muted">{result.total} {plural(result.total, ["товар", "товари", "товарів"])}</p>
-          {kind === "sale" && (
+          {kind === "sale" && !bf && (
             <p className="muted small">
               Біля кожного товару вказано, до якої дати діє знижка. Після цієї дати ціна повертається до звичайної. <Link href="/info/akcii">Умови акцій</Link>
             </p>
