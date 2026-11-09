@@ -59,6 +59,7 @@ export type Filters = {
   priceMin: number | null; // цена «от», грн
   priceMax: number | null; // цена «до», грн
   brandIds: string[];
+  categoryIds: string[]; // id головних груп (лише на сторінках підбірок: акції, хіти, новинки)
   attrs: Record<string, string[]>; // id характеристики -> выбранные id значений
 };
 
@@ -107,6 +108,7 @@ export function parseListParams(sp: SP): ListParams {
       priceMin,
       priceMax,
       brandIds: arr(sp.brand).filter(isId),
+      categoryIds: arr(sp.cat).filter(isId),
       attrs,
     },
   };
@@ -160,11 +162,16 @@ export async function getTopCategoriesWithChildren(run: Run) {
 
 // ---------- Список товаров (категория или поиск) ----------
 
-export type Scope = { type: "category"; categoryId: string } | { type: "search"; tokens: string[] };
+export type Scope = { type: "category"; categoryId: string } | { type: "search"; tokens: string[] } | { type: "collection"; kind: CollectionKind };
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, "\\$&");
 
-function baseWhere(scope: Scope, params: unknown[]): { cte: string; where: string[] } {
+function baseWhere(scope: Scope, params: unknown[]): { cte: string; where: string[]; join: string } {
+  if (scope.type === "collection") {
+    // Підбірка (акції, хіти, новинки): ті самі умови, що й на головній
+    const c = COLLECTIONS[scope.kind];
+    return { cte: "", join: c.from, where: [c.anyStock ? SHOWABLE_ANY_STOCK : SHOWABLE, c.where] };
+  }
   if (scope.type === "category") {
     params.push(scope.categoryId);
     const n = params.length;
@@ -173,6 +180,7 @@ function baseWhere(scope: Scope, params: unknown[]): { cte: string; where: strin
               SELECT id FROM "Category" WHERE id = $${n}
               UNION ALL
               SELECT c.id FROM "Category" c JOIN tree t ON c."parentId" = t.id WHERE c."isActive" = true)`,
+      join: "",
       where: [`p."categoryId" IN (SELECT id FROM tree)`, `p."isHidden" = false`],
     };
   }
@@ -181,7 +189,7 @@ function baseWhere(scope: Scope, params: unknown[]): { cte: string; where: strin
     const n = params.length;
     return `(p.name ILIKE $${n} OR p."vendorCode" ILIKE $${n} OR p.sku ILIKE $${n})`;
   })];
-  return { cte: "", where };
+  return { cte: "", where, join: "" };
 }
 
 function applyFilters(f: Filters, where: string[], params: unknown[]) {
@@ -197,6 +205,13 @@ function applyFilters(f: Filters, where: string[], params: unknown[]) {
   if (f.brandIds.length) {
     params.push(f.brandIds);
     where.push(`p."brandId" = ANY($${params.length}::text[])`);
+  }
+  if (f.categoryIds.length) {
+    // головна група разом з усіма її підгрупами
+    params.push(f.categoryIds);
+    where.push(
+      `p."categoryId" IN (SELECT c2.id FROM "Category" c2 JOIN "Category" t ON t.id = ANY($${params.length}::text[]) AND (c2.path = t.path OR c2.path LIKE t.path || ' > %'))`
+    );
   }
   for (const [attrId, valueIds] of Object.entries(f.attrs)) {
     params.push(attrId, valueIds);
@@ -215,23 +230,25 @@ export async function listProducts(
   lp: ListParams
 ): Promise<{ items: ProductCardData[]; total: number }> {
   const params: unknown[] = [];
-  const { cte, where } = baseWhere(scope, params);
+  const { cte, where, join } = baseWhere(scope, params);
   applyFilters(lp.filters, where, params);
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
+  // У підбірці порядок за замовчуванням свій (в акціях: найбільша знижка зверху)
+  const orderSql = scope.type === "collection" && lp.sort === "default" ? (COLLECTIONS[scope.kind].pageOrder ?? COLLECTIONS[scope.kind].order) : SORT_SQL[lp.sort];
   const listParams = [...params, PER_PAGE, (lp.page - 1) * PER_PAGE];
   const limitN = params.length + 1;
   const offsetN = params.length + 2;
 
   const [countRows, rows] = await Promise.all([
-    run(`${cte} SELECT count(*)::int AS n FROM "Product" p ${whereSql}`, params),
+    run(`${cte} SELECT count(*)::int AS n FROM "Product" p ${join} ${whereSql}`, params),
     run(
       `${cte}
        SELECT p.id, p.name, p.slug, p.price::float8 AS price, ${OLD_PRICE_SQL}, ${SALE_UNTIL_SQL},
               p."isAvailable", p."vendorCode",
               (SELECT i.url FROM "ProductImage" i WHERE i."productId" = p.id ORDER BY i."sortOrder" LIMIT 1) AS image
-       FROM "Product" p ${whereSql}
-       ORDER BY ${SORT_SQL[lp.sort]}
+       FROM "Product" p ${join} ${whereSql}
+       ORDER BY ${orderSql}
        LIMIT $${limitN} OFFSET $${offsetN}`,
       listParams
     ),
@@ -246,32 +263,47 @@ export type FacetAttr = { id: string; name: string; unit: string | null; total: 
 
 export type FacetPrice = { min: number | null; max: number | null };
 
-export async function getFacets(run: Run, categoryId: string): Promise<{ brands: FacetBrand[]; attributes: FacetAttr[]; price: FacetPrice }> {
+export type FacetGroup = { id: string; name: string; n: number };
+
+export async function getFacets(run: Run, scopeOrCategoryId: string | Scope): Promise<{ brands: FacetBrand[]; attributes: FacetAttr[]; price: FacetPrice; groups: FacetGroup[] }> {
   const params: unknown[] = [];
-  const { cte, where } = baseWhere({ type: "category", categoryId }, params);
+  const scope: Scope = typeof scopeOrCategoryId === "string" ? { type: "category", categoryId: scopeOrCategoryId } : scopeOrCategoryId;
+  const { cte, where, join } = baseWhere(scope, params);
   // Фільтри будуємо лише з товарів у наявності: так у списку немає значень від товарів, яких покупець усе одно не купить
   where.push(`p."isAvailable" = true`);
   const whereSql = `WHERE ${where.join(" AND ")}`;
 
-  const [brandRows, attrRows, totalRows, priceRows] = await Promise.all([
+  const [brandRows, attrRows, totalRows, priceRows, groupRows] = await Promise.all([
     run(
       `${cte} SELECT b.id, b.name, count(*)::int AS n
-       FROM "Product" p JOIN "Brand" b ON b.id = p."brandId" ${whereSql}
+       FROM "Product" p ${join} JOIN "Brand" b ON b.id = p."brandId" ${whereSql}
        GROUP BY b.id, b.name ORDER BY n DESC, b.name LIMIT 12`,
       params
     ),
     run(
       `${cte} SELECT a.id AS "attrId", a.name AS "attrName", a.unit, av.id AS "valueId", av.value, count(*)::int AS n
        FROM "ProductAttributeValue" pav
-       JOIN "Product" p ON p.id = pav."productId"
+       JOIN "Product" p ON p.id = pav."productId" ${join}
        JOIN "Attribute" a ON a.id = pav."attributeId"
        JOIN "AttributeValue" av ON av.id = pav."valueId"
        ${whereSql}
        GROUP BY a.id, a.name, a.unit, av.id, av.value`,
       params
     ),
-    run(`${cte} SELECT count(*)::int AS n FROM "Product" p ${whereSql}`, params),
-    run(`${cte} SELECT (min(p.price) FILTER (WHERE p.price > 0))::float8 AS min, max(p.price)::float8 AS max FROM "Product" p ${whereSql}`, params),
+    run(`${cte} SELECT count(*)::int AS n FROM "Product" p ${join} ${whereSql}`, params),
+    run(`${cte} SELECT (min(p.price) FILTER (WHERE p.price > 0))::float8 AS min, max(p.price)::float8 AS max FROM "Product" p ${join} ${whereSql}`, params),
+    // Головні групи (лише для підбірок): скільки товарів підбірки в кожній
+    scope.type === "collection"
+      ? run(
+          `SELECT t.id, t.name, count(*)::int AS n
+           FROM "Product" p ${join}
+           JOIN "Category" c ON c.id = p."categoryId"
+           JOIN "Category" t ON t."parentId" IS NULL AND t.path = split_part(c.path, ' > ', 1)
+           ${whereSql}
+           GROUP BY t.id, t.name ORDER BY n DESC, t.name`,
+          params
+        )
+      : Promise.resolve([]),
   ]);
 
   const totalProducts = Number(totalRows[0]?.n ?? 0);
@@ -304,7 +336,7 @@ export async function getFacets(run: Run, categoryId: string): Promise<{ brands:
     min: priceRows[0]?.min == null ? null : Math.floor(Number(priceRows[0].min)),
     max: priceRows[0]?.max == null || Number(priceRows[0].max) <= 0 ? null : Math.ceil(Number(priceRows[0].max)),
   };
-  return { brands: brandRows as FacetBrand[], attributes, price };
+  return { brands: brandRows as FacetBrand[], attributes, price, groups: groupRows as FacetGroup[] };
 }
 
 // Подписи для уже выбранных фильтров (чтобы показать плашки-теги, даже если фильтр скрыт из списка).
@@ -424,13 +456,14 @@ export function toQuery(lp: ListParams, opts: { withPage?: boolean } = {}): URLS
   if (lp.filters.priceMin !== null) q.set("pmin", String(lp.filters.priceMin));
   if (lp.filters.priceMax !== null) q.set("pmax", String(lp.filters.priceMax));
   for (const b of lp.filters.brandIds) q.append("brand", b);
+  for (const c of lp.filters.categoryIds) q.append("cat", c);
   for (const [a, vs] of Object.entries(lp.filters.attrs)) for (const v of vs) q.append("f", `${a}:${v}`);
   if (opts.withPage && lp.page > 1) q.set("page", String(lp.page));
   return q;
 }
 
 export function hasActiveFilters(lp: ListParams): boolean {
-  return lp.filters.inStock || lp.filters.priceMin !== null || lp.filters.priceMax !== null || lp.filters.brandIds.length > 0 || Object.keys(lp.filters.attrs).length > 0;
+  return lp.filters.inStock || lp.filters.priceMin !== null || lp.filters.priceMax !== null || lp.filters.brandIds.length > 0 || lp.filters.categoryIds.length > 0 || Object.keys(lp.filters.attrs).length > 0;
 }
 
 

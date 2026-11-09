@@ -867,3 +867,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { border-color
 .bf-on .hc-col-bf .hc-more:hover { background: #FFEFB8; }
 .bf-on .hc-tab-bf { color: var(--bf-ink); font-weight: 800; }
 .bf-on .hc-radio-0:checked ~ .hc-tabs .hc-tab-bf, .bf-on .hc-radio-1:checked ~ .hc-tabs .hc-tab-bf, .bf-on .hc-radio-2:checked ~ .hc-tabs .hc-tab-bf { background: var(--bf-cream); border-bottom-color: var(--bf-yellow); }
+
+/* ===== Адмінка: фільтр за залишком ===== */
+.adm-qty { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; margin: var(--space-3) 0; }
+.adm-qty-title { font-weight: 700; align-self: center; }
+.adm-qty label { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); color: var(--color-ink-muted); }
+.adm-qty input[type="number"] { width: 96px; }
+.adm-qty select { min-width: 190px; }
