@@ -834,14 +834,14 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { border-color
 .bf-eyebrow { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; font-size: var(--text-sm); }
 .bf-tag { background: var(--bf-yellow); color: var(--bf-ink); font-weight: 800; padding: 2px 10px; border-radius: 6px; }
 .bf-left { font-weight: 600; color: var(--bf-navy); }
-.bf-title { margin: var(--space-2) 0; font-size: var(--text-2xl); font-weight: 800; line-height: 1.05; color: var(--bf-ink); }
-.bf-lead { margin: 0; max-width: 50ch; color: #3b4b5a; }
+.bf-title { text-wrap: balance; margin: var(--space-2) 0; font-size: var(--text-2xl); font-weight: 800; line-height: 1.05; color: var(--bf-ink); }
 .bf-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; margin-top: var(--space-4); }
 .bf-btn { background: var(--bf-navy); color: #fff; font-weight: 700; padding: var(--space-3) var(--space-6); border-radius: var(--radius); text-decoration: none; }
 .bf-btn:hover { background: var(--color-accent-hover); }
 .bf-link { color: var(--bf-navy); text-decoration: underline; font-size: var(--text-sm); }
 .bf-points { list-style: none; margin: var(--space-4) 0 0; padding: 0; display: grid; gap: var(--space-2); font-size: var(--text-sm); }
-.bf-points li { padding-left: 20px; position: relative; }
+.bf-points li { padding-left: 20px; position: relative; text-wrap: pretty; }
+@media (min-width: 900px) { .bf-points li { text-align: justify; hyphens: auto; } }
 .bf-points li::before { content: ""; position: absolute; left: 0; top: .5em; width: 9px; height: 9px; background: var(--bf-yellow); border-radius: 2px; transform: rotate(45deg); }
 /* бігуча стрічка внизу банера */
 .bf-marquee { background: var(--bf-yellow); color: var(--bf-ink); overflow: hidden; white-space: nowrap; font-weight: 800; font-size: var(--text-xs); letter-spacing: .12em; padding: 7px 0; border-top: 1px solid #E5AE00; }

@@ -42,7 +42,6 @@ export default function BlackFridayBanner({ variant }: { variant: "home" | "page
         <div className="bf-banner-main">
           <p className="bf-eyebrow"><span className="bf-tag">{BF_PERIOD_TEXT}</span> <span className="bf-left">{leftText}</span></p>
           {variant === "home" ? <p className="bf-title">Чорна п&apos;ятниця</p> : <h1 className="bf-title">Чорна п&apos;ятниця</h1>}
-          <p className="bf-lead">Знижки на інструмент і електроніку. Стара й нова ціна поруч, дата завершення знижки біля кожного товару.</p>
           <div className="bf-actions">
             {variant === "home" && <Link href="/collection/sale" className="bf-btn">Дивитись акції</Link>}
             <Link href={BF_TERMS_HREF} className="bf-link">Умови акції</Link>
