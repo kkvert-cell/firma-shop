@@ -63,9 +63,21 @@ function splitSentences(text: string): string[] {
 const INLINE_MARK = new RegExp(`(^|\\s)([${MARK_CHARS}])\\s+(?=\\S)`, "gu");
 const WEAK_MARK = /^[\p{Pd}\u2212*]$/u; // обычные дефисы и звёздочка — «слабые» маркеры: для них нужна подводка с двоеточием
 const UP = "А-ЯІЇЄҐA-Z";
+// Дефис между числами — это диапазон («3.5 - 9.0», «0 - 99%»), а не маркер нового пункта списка
+function isRangeMark(line: string, m: RegExpMatchArray): boolean {
+  if (!WEAK_MARK.test(m[2])) return false;
+  const before = line.slice(0, m.index).trimEnd();
+  const after = line.slice(m.index! + m[0].length);
+  return /[\d%°]$/.test(before) && /^[\d+]/.test(after);
+}
+
+// «3.5 - 9.0» → «3.5–9.0»: диапазон чисел пишем с короткой чертой без пробелов
+const RANGE = /(\d(?:\s?(?:%|°[CFС]))?)\s+[-–—−]\s+(?=\d)/g;
+export const tidyRanges = (s: string) => s.replace(RANGE, "$1–");
+
 function expandInlineList(line: string): string {
   if (line.length < 30) return line;
-  let marks = [...line.matchAll(INLINE_MARK)];
+  let marks = [...line.matchAll(INLINE_MARK)].filter((m) => !isRangeMark(line, m));
   // Список начинается с первого маркера, перед которым стоит двоеточие (или с обычных значков «•»).
   // Так тире внутри вводного текста («Модель X - это прибор…») не мешает найти список дальше по строке.
   const bulletStart = marks.findIndex((m) => !WEAK_MARK.test(m[2]));
@@ -124,10 +136,12 @@ function expandInlineList(line: string): string {
 }
 
 export function parseDescription(raw: string | null | undefined): Block[] {
-  const text = normalizeDescription(raw)
-    .split("\n")
-    .map(expandInlineList)
-    .join("\n");
+  const text = tidyRanges(
+    normalizeDescription(raw)
+      .split("\n")
+      .map(expandInlineList)
+      .join("\n")
+  );
   if (!text) return [];
   const blocks: Block[] = [];
   let para: string[] = [];
