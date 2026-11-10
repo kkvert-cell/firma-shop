@@ -8,12 +8,23 @@
 // ============================================================================
 
 import { getSql } from "@/lib/db";
+import { canonicalRedirect } from "@/lib/canonical";
+import { SITE_URL } from "@/lib/site";
 import { NextRequest, NextResponse } from "next/server";
 
 const OLD_PROM = /^\/(?:(?:ua|ru)\/)?([pg])(\d{5,})(?:-[^/]*)?(?:\.html)?\/?$/;
 
 export async function proxy(request: NextRequest) {
   const path = request.nextUrl.pathname;
+  // Єдина адреса сайту: www і стара адреса workers.dev ведуть на основний домен
+  const canonical = canonicalRedirect({
+    host: request.headers.get("host") ?? request.nextUrl.host,
+    pathname: path,
+    search: request.nextUrl.search,
+    method: request.method,
+    siteUrl: SITE_URL,
+  });
+  if (canonical) return NextResponse.redirect(canonical, 301);
   const m = OLD_PROM.exec(path);
   if (!m) return NextResponse.next();
   const [, kind, id] = m;
@@ -48,6 +59,6 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // Только пути в старом формате Prom: так остальные страницы не делают лишних запросов к БД
-  matcher: ["/:old([pg]\\d{5,}.*)", "/ua/:old([pg]\\d{5,}.*)", "/ru/:old([pg]\\d{5,}.*)"],
+  // Усі сторінки (для переходу на основний домен); запит до БД робимо лише для старих адрес Prom
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|brand/).*)"],
 };
