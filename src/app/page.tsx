@@ -7,6 +7,7 @@ import { SHOP_PHONE } from "@/lib/site";
 import GroupCards from "@/components/GroupCards";
 import HomeCollections from "@/components/HomeCollections";
 import BlackFridayBanner from "@/components/BlackFridayBanner";
+import { SELLER } from "@/lib/legal";
 import { isBlackFriday } from "@/lib/blackfriday";
 import { COLLECTION_KINDS, COLLECTION_TITLES, getHomeCollections, getRunner, getTopCategoriesWithChildren, type CollectionKind } from "@/lib/catalog";
 
@@ -120,7 +121,7 @@ export default async function HomePage() {
         </div>
         <div>
           <span className="category-icon"><Icon name="clock" /></span>
-          <span><strong>Працюємо</strong><p>Пн–Пт 09:00–19:00, Сб–Нд 10:00–18:00</p></span>
+          <span><strong>Працюємо</strong><p>{SELLER.hours}</p></span>
         </div>
       </section>
     </main>
