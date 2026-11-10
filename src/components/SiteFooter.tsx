@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { legalPages } from "@/lib/legal-pages";
-import { SELLER, sellerReady } from "@/lib/legal";
 import CopyrightYear from "@/components/CopyrightYear";
 import { SHOP_PHONE, SHOP_PHONE_TEXT, SITE_NAME } from "@/lib/site";
 
@@ -19,7 +18,6 @@ export default function SiteFooter() {
       </nav>
       <p className="muted small">
         {SITE_NAME} · <a href={`tel:${SHOP_PHONE}`}>{SHOP_PHONE_TEXT}</a>
-        {sellerReady() ? ` · ${SELLER.name}, код ${SELLER.taxId}, ${SELLER.address}` : ""}
       </p>
       <p className="footer-copy">
         <CopyrightYear serverYear={new Date().getFullYear()} name={SITE_NAME} />

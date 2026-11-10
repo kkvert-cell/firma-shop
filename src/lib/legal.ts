@@ -4,9 +4,8 @@
 export const SELLER = {
   name: "ФОП Сорока Валерій Вікторович", // наприклад: ФОП Прізвище Ім'я По батькові  або  ТОВ «Назва»
   taxId: "3248818410", // РНОКПП (для ФОП) або код ЄДРПОУ (для ТОВ)
-  address: "Україна, 41220, Сумська обл., Шосткинський р-н, місто Дружба, вулиця Шарапова М, будинок 4", // юридична адреса або адреса, на яку приймаються звернення
   email: "valmortal@gmail.com", // пошта для звернень покупців
   hours: "Пн–Пт 09:00–19:00, Сб–Нд 10:00–18:00", // графік роботи: показується і на головній, і на сторінках умов
 };
 
-export const sellerReady = () => Boolean(SELLER.name && SELLER.taxId && SELLER.address && SELLER.email);
+export const sellerReady = () => Boolean(SELLER.name && SELLER.taxId && SELLER.email);

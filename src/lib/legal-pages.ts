@@ -125,7 +125,7 @@ export function legalPages(): LegalPage[] {
         {
           h: "8. Реквізити Продавця",
           p: [
-            `${seller()}${SELLER.taxId ? `, код ${SELLER.taxId}` : ""}${SELLER.address ? `, адреса: ${SELLER.address}` : ""}.`,
+            `${seller()}${SELLER.taxId ? `, код ${SELLER.taxId}` : ""}.`,
             contacts(),
           ],
         },
@@ -153,6 +153,7 @@ export function legalPages(): LegalPage[] {
           ],
         },
         { h: "Питання", p: [contacts()] },
+        { h: "Продавець", p: [`${seller()}${SELLER.taxId ? `, код ${SELLER.taxId}` : ""}.`] },
       ],
     },
     {
@@ -213,7 +214,7 @@ export function legalPages(): LegalPage[] {
         },
         {
           h: "Продавець (володілець даних)",
-          p: [`${seller()}${SELLER.taxId ? `, код ${SELLER.taxId}` : ""}${SELLER.address ? `, ${SELLER.address}` : ""}.`],
+          p: [`${seller()}${SELLER.taxId ? `, код ${SELLER.taxId}` : ""}.`],
         },
       ],
     },
