@@ -158,7 +158,7 @@ function expandInlineList(line: string): string {
 
 // ===== Таблицы измерительных характеристик: «6 В – 0,001 В; ±(0,5% + 5d).» → диапазон / разрешение / точность =====
 const MU = "[A-Za-zА-Яа-яІіЇїЄєҐґµμΩ]{1,4}";
-const SPEC_ROW = new RegExp(`(\\d[\\d.,]*\\s?${MU})\\s*[-–]\\s*(\\d[\\d.,]*\\s?${MU})\\s*;\\s*(±\\s?\\([^)]*\\)|±\\s?[\\d.,]+\\s?%?)\\s*\\.?`, "g");
+const SPEC_ROW = new RegExp(`(\\d[\\d.,]*\\s?${MU})\\s*[-–—]\\s*(\\d[\\d.,]*\\s?${MU})\\s*;\\s*(±\\s?\\([^)]*\\)|±\\s?[\\d.,]+\\s?%?)\\s*\\.?`, "g");
 const SPEC_HEAD = ["Діапазон", "Роздільна здатність", "Точність"];
 // Предложения; а «Підпис: Наступна назва:» (двокрапка перед словом з великої літери) теж розділяємо
 const splitSentences2 = (x: string) =>
@@ -204,7 +204,7 @@ function extractSpecTables(line: string): Block[] | null {
 // ===== Типографіка: дрібні виправлення тексту, щоб він читався охайно і добре вирівнювався =====
 const NBSP = "\u00A0";
 const LET = "А-ЯІЇЄҐа-яіїєґA-Za-z";
-const UNITS = "Вт|кВт|МВт|мВт|В|кВ|мВ|А|мА|Гц|кГц|МГц|ГГц|мм|см|дм|км|м|кг|мг|г|т|мл|л|шт|хв|сек|секунд[а-яі]*|год|годин[а-яі]*|дн|днів|відліків|люкс|lux|pH|Ом|кОм|МОм|мкФ|нФ|пФ|Ф|Н|Па|кПа|бар|дБ|dB|об/хв|мАг|Втгод|Мб|МБ|Гб|ГБ|Кб|КБ|px|дюйм[а-яі]*";
+const UNITS = "Вт|кВт|МВт|мВт|В|кВ|мВ|А|мА|Гц|кГц|МГц|ГГц|мм|см|дм|км|м|кг|мг|г|т|мл|л|шт|хв|сек|секунд[а-яі]*|год|годин[а-яі]*|дн|днів|відліків|люкс|lux|pH|Ом|кОм|МОм|мкФ|мФ|нФ|пФ|Ф|Н|Па|кПа|бар|дБ|dB|об/хв|мАг|Втгод|Мб|МБ|Гб|ГБ|Кб|КБ|px|дюйм[а-яі]*";
 const RE_NUM_UNIT = new RegExp(`(\\d)\\s+(?=(?:°|%|₴|(?:${UNITS})(?![${LET}])))`, "g");
 const RE_NUM_RANGE = new RegExp(`(?<![\\d-])(\\d+(?:[.,]\\d+)?)-(\\d+(?:[.,]\\d+)?)(?=\\s?(?:%|°|₴|[${LET}]))`, "g");
 const RE_SHORT_WORD = /(^|[\s(«"„—–])([ВвУуЗзІіЙйАаОоЖжБбКкСс])[ \t]+(?=\S)/g;
@@ -379,8 +379,24 @@ export function parseDescription(raw: string | null | undefined): Block[] {
   }
   // Таблицы характеристик: абзацы подряд склеиваем и ищем в них строки «6 В – 0,001 В; ±(0,5% + 5d).»
   const withTables: Block[] = [];
+  const hasSpec = (x: string) => [...x.matchAll(SPEC_ROW)].length >= 3;
   for (let i = 0; i < res.length; ) {
-    if (res[i].t !== "p") {
+    const cur = res[i];
+    if ((cur.t === "ul" || cur.t === "ol") && cur.items.some(hasSpec)) {
+      // таблица «приклеилась» к пункту списка: вступление остаётся пунктом, таблицы идут после списка
+      const idx = cur.items.findIndex(hasSpec);
+      const t = extractSpecTables(cur.items[idx]) ?? [];
+      const lead: string[] = [];
+      while (t.length && t[0].t === "p") lead.push((t.shift() as Extract<Block, { t: "p" }>).lines.join(" "));
+      const before = [...cur.items.slice(0, idx), ...(lead.length ? [lead.join(" ")] : [])];
+      if (before.length) withTables.push({ t: cur.t, items: before });
+      withTables.push(...t);
+      const after = cur.items.slice(idx + 1);
+      if (after.length) withTables.push({ t: cur.t, items: after });
+      i++;
+      continue;
+    }
+    if (cur.t !== "p") {
       withTables.push(res[i++]);
       continue;
     }
