@@ -701,8 +701,16 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { border-color
 .rt dt { color: var(--color-ink-muted); }
 .rt dd { margin: 0; font-weight: 600; }
 .rt li { text-wrap: pretty; }
-/* Один вигляд для всього тексту: абзаци й пункти списків вирівнюються по ширині (на комп'ютері), на вузьких екранах — по лівому краю */
-@media (min-width: 900px) { .rt p, .rt li { text-align: justify; hyphens: auto; } }
+/* Один вигляд для всього тексту: абзаци й пункти списків вирівнюються по ширині на всіх екранах, довгі слова переносяться */
+.rt p, .rt li, .sale-period, .legal-lead, main p.muted, main p.small {
+  text-align: justify;
+  text-justify: inter-word;
+  -webkit-hyphens: auto;
+  hyphens: auto;
+  hyphenate-limit-chars: 6 3 3;
+  text-wrap: pretty;
+}
+h1, h2, h3 { text-wrap: balance; }
 .pdp-description p { white-space: normal; }
 .seo-text.rt { margin-top: var(--space-6); color: var(--color-ink-muted); font-size: var(--text-sm); }
 

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { legalPages } from "@/lib/legal-pages";
 import { sellerReady } from "@/lib/legal";
+import { hyphenateText, typo } from "@/lib/text-format";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -26,11 +27,11 @@ export default async function InfoPage({ params }: Props) {
         <p className="notice">Службова помітка: реквізити продавця ще не заповнені (файл src/lib/legal.ts). Перед запуском сайту їх потрібно вказати.</p>
       )}
       <h1 className="heading page-title">{page.title}</h1>
-      {page.lead && <p className="muted legal-lead">{page.lead}</p>}
+      {page.lead && <p className="muted legal-lead">{hyphenateText(typo(page.lead))}</p>}
       {page.sections.map((s) => (
         <section key={s.h} className="legal-section">
           <h2 className="heading section-title">{s.h}</h2>
-          <div className="rt">{s.p.map((t, i) => <p key={i}>{t}</p>)}</div>
+          <div className="rt">{s.p.map((t, i) => <p key={i}>{hyphenateText(typo(t))}</p>)}</div>
         </section>
       ))}
       <p><Link href="/">← На головну</Link></p>

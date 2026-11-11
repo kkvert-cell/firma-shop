@@ -1,6 +1,8 @@
 // Красивое оформление описаний: абзацы, списки, подзаголовки и таблица характеристик.
 // Исходный текст — обычный (из Prom или набранный в админке). Правила простые и описаны подсказкой под полем описания.
 
+import { hyphenateSync } from "hyphen/uk";
+
 export type Block =
   | { t: "p"; lines: string[] }
   | { t: "h"; text: string }
@@ -78,6 +80,17 @@ export const tidyRanges = (s: string) => s.replace(RANGE, "$1–");
 function expandInlineList(line: string): string {
   if (line.length < 30) return line;
   let marks = [...line.matchAll(INLINE_MARK)].filter((m) => !isRangeMark(line, m));
+  // Тире внутри пункта («…натисніть кнопку - результати з'являться…», «…умовах - вдома, у саду…») — не новий пункт.
+  // Надёжный маркер: в начале строки, после «. ; : ! ?» или перед словом с заглавной буквы. Если таких маркеров в строке
+  // хотя бы три, «ненадёжные» дефисы (после слова, перед строчной буквой) считаем обычным тире внутри предложения.
+  const isClear = (m: RegExpMatchArray) => {
+    const before = line.slice(0, m.index).trimEnd();
+    const after = line.slice(m.index! + m[0].length);
+    return m.index === 0 || /[.;:!?…]$/.test(before) || /^[А-ЯІЇЄҐA-Z0-9«"(]/.test(after);
+  };
+  if (marks.filter((m) => WEAK_MARK.test(m[2]) && isClear(m)).length >= 3) {
+    marks = marks.filter((m) => !WEAK_MARK.test(m[2]) || isClear(m));
+  }
   // Список начинается с первого маркера, перед которым стоит двоеточие (или с обычных значков «•»).
   // Так тире внутри вводного текста («Модель X - это прибор…») не мешает найти список дальше по строке.
   const bulletStart = marks.findIndex((m) => !WEAK_MARK.test(m[2]));
@@ -133,6 +146,82 @@ function expandInlineList(line: string): string {
   });
   if (items < 2) return line;
   return out.join("\n");
+}
+
+
+// ===== Типографіка: дрібні виправлення тексту, щоб він читався охайно і добре вирівнювався =====
+const NBSP = "\u00A0";
+const LET = "А-ЯІЇЄҐа-яіїєґA-Za-z";
+const UNITS = "Вт|кВт|МВт|мВт|В|кВ|мВ|А|мА|Гц|кГц|МГц|ГГц|мм|см|дм|км|м|кг|мг|г|т|мл|л|шт|хв|сек|секунд[а-яі]*|год|годин[а-яі]*|дн|днів|відліків|люкс|lux|pH|Ом|кОм|МОм|мкФ|нФ|пФ|Ф|Н|Па|кПа|бар|дБ|dB|об/хв|мАг|Втгод|Мб|МБ|Гб|ГБ|Кб|КБ|px|дюйм[а-яі]*";
+const RE_NUM_UNIT = new RegExp(`(\\d)\\s+(?=(?:°|%|₴|(?:${UNITS})(?![${LET}])))`, "g");
+const RE_NUM_RANGE = new RegExp(`(?<![\\d-])(\\d+(?:[.,]\\d+)?)-(\\d+(?:[.,]\\d+)?)(?=\\s?(?:%|°|₴|[${LET}]))`, "g");
+const RE_SHORT_WORD = /(^|[\s(«"„—–])([ВвУуЗзІіЙйАаОоЖжБбКкСс])[ \t]+(?=\S)/g;
+const RE_COMMA_LETTER = new RegExp(`,(?=[${LET}])`, "g");
+const RE_SKIP = /(\S*(?:https?:\/\/|www\.|@)\S*)/;
+
+function typoPart(t: string): string {
+  return t
+    .replace(/℃/g, "°C") // одним значком: ℃ → °C, ℉ → °F
+    .replace(/℉/g, "°F")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([,;:!?])/g, "$1") // пробіл перед комою, крапкою з комою, двокрапкою, знаками оклику
+    .replace(/\s+\.(?!\.)(?=\s|$)/g, ".") // пробіл перед крапкою в кінці речення
+    .replace(/\s+\.(?=[А-ЯІЇЄҐ])/g, ". ") // «екрані .Паяльник» → «екрані. Паяльник»
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .replace(RE_COMMA_LETTER, ", ") // пропущений пробіл після коми
+    .replace(/([а-яіїєґ])\.(?=[А-ЯІЇЄҐ])/g, "$1. ") // «екрані.Паяльник» → «екрані. Паяльник»
+    .replace(RE_NUM_RANGE, "$1–$2") // 180-500 °С → 180–500 °С
+    .replace(RE_NUM_UNIT, `$1${NBSP}`) // число + одиниця не розриваються
+    .replace(/(^|\S) [-–] (?=\S)/g, `$1${NBSP}— `) // «908V - це» → «908V — це»
+    .replace(/(\d{1,3}) (?=\d{3}(?!\d))/g, `$1${NBSP}`) // 1 150 ₴ — тисячі не розриваються
+    .replace(RE_SHORT_WORD, `$1$2${NBSP}`); // однолітерні слова (в, у, з, і, й…) не лишаються в кінці рядка
+}
+
+
+// ===== М'які переноси: щоб текст по ширині не розтягувався великими пробілами, довгі слова переносимо за правилами =====
+const SHY = "\u00AD";
+const CYR = "А-ЯІЇЄҐа-яіїєґ";
+const RE_LONG_WORD = new RegExp(`(?<![${CYR}'’ʼ-])[${CYR}]{7,}(?![${CYR}'’ʼ-])`, "g");
+const hyphCache = new Map<string, string>();
+function hyphenWord(w: string): string {
+  const hit = hyphCache.get(w);
+  if (hit !== undefined) return hit;
+  // Бібліотека дає пропозиції переносів; залишаємо лише ті, що лишають не менше 3 літер з кожного боку
+  const parts = hyphenateSync(w, { hyphenChar: "|", minWordLength: 7 }).split("|");
+  const out: string[] = [];
+  let cur = "";
+  for (const part of parts) {
+    cur += part;
+    if (cur.length >= 3) {
+      out.push(cur);
+      cur = "";
+    }
+  }
+  if (cur) {
+    if (out.length) out[out.length - 1] += cur;
+    else out.push(cur);
+  }
+  const res = out.join(SHY);
+  hyphCache.set(w, res);
+  return res;
+}
+
+// Додає м'які переноси в довгі українські слова (не чіпає посилання, пошту, слова з цифрами й латиницею)
+export function hyphenateText(text: string): string {
+  if (!text) return text;
+  return text
+    .split(RE_SKIP)
+    .map((part, i) => (i % 2 === 1 ? part : part.replace(RE_LONG_WORD, hyphenWord)))
+    .join("");
+}
+
+export function typo(text: string): string {
+  if (!text) return text;
+  return text
+    .split(RE_SKIP)
+    .map((part, i) => (i % 2 === 1 ? part : typoPart(part)))
+    .join("");
 }
 
 export function parseDescription(raw: string | null | undefined): Block[] {
@@ -227,5 +316,10 @@ export function parseDescription(raw: string | null | undefined): Block[] {
     }
     res.push(b);
   }
-  return res;
+  return res.map((b): Block => {
+    if (b.t === "p") return { t: "p", lines: b.lines.map((l) => hyphenateText(typo(l))) };
+    if (b.t === "h") return { t: "h", text: typo(b.text) };
+    if (b.t === "ul" || b.t === "ol") return { t: b.t, items: b.items.map((x) => hyphenateText(typo(x))) };
+    return { t: "dl", rows: b.rows.map(([k, v]) => [typo(k), typo(v)] as [string, string]) };
+  });
 }
