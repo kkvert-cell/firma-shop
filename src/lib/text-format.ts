@@ -8,7 +8,8 @@ export type Block =
   | { t: "h"; text: string }
   | { t: "ul"; items: string[] }
   | { t: "ol"; items: string[] }
-  | { t: "dl"; rows: [string, string][] };
+  | { t: "dl"; rows: [string, string][] }
+  | { t: "table"; caption: string; head: string[]; rows: string[][] };
 
 const NAMED: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", laquo: "«", raquo: "»", ndash: "–", mdash: "—", hellip: "…", deg: "°", times: "×", plusmn: "±", micro: "µ", bull: "•" };
 const decodeEntities = (s: string) =>
@@ -70,12 +71,18 @@ function isRangeMark(line: string, m: RegExpMatchArray): boolean {
   if (!WEAK_MARK.test(m[2])) return false;
   const before = line.slice(0, m.index).trimEnd();
   const after = line.slice(m.index! + m[0].length);
-  return /[\d%°]$/.test(before) && /^[\d+]/.test(after);
+  // «6 В - 0,001 В», «40 Гц - 1 кГц», «3.5 - 9.0»: слева число (с единицей), справа тоже число
+  return /\d[\d.,\s]*[A-Za-zА-Яа-яІіЇїЄєҐґµμΩ°%/]{0,5}$/.test(before) && /^[\d+]/.test(after);
 }
 
 // «3.5 - 9.0» → «3.5–9.0»: диапазон чисел пишем с короткой чертой без пробелов
 const RANGE = /(\d(?:\s?(?:%|°[CFС]))?)\s+[-–—−]\s+(?=\d)/g;
-export const tidyRanges = (s: string) => s.replace(RANGE, "$1–");
+let rangeUnits: RegExp | null = null;
+export const tidyRanges = (s: string) => {
+  // «40 Гц - 1 кГц» → «40 Гц–1 кГц»
+  rangeUnits ??= new RegExp(`(\\d(?:[.,]\\d+)?\\s?(?:${UNITS})(?![${LET}]))\\s+[-–—−]\\s+(?=\\d)`, "g");
+  return s.replace(RANGE, "$1–").replace(rangeUnits, "$1–");
+};
 
 function expandInlineList(line: string): string {
   if (line.length < 30) return line;
@@ -149,6 +156,51 @@ function expandInlineList(line: string): string {
 }
 
 
+// ===== Таблицы измерительных характеристик: «6 В – 0,001 В; ±(0,5% + 5d).» → диапазон / разрешение / точность =====
+const MU = "[A-Za-zА-Яа-яІіЇїЄєҐґµμΩ]{1,4}";
+const SPEC_ROW = new RegExp(`(\\d[\\d.,]*\\s?${MU})\\s*[-–]\\s*(\\d[\\d.,]*\\s?${MU})\\s*;\\s*(±\\s?\\([^)]*\\)|±\\s?[\\d.,]+\\s?%?)\\s*\\.?`, "g");
+const SPEC_HEAD = ["Діапазон", "Роздільна здатність", "Точність"];
+// Предложения; а «Підпис: Наступна назва:» (двокрапка перед словом з великої літери) теж розділяємо
+const splitSentences2 = (x: string) =>
+  x
+    .split(/(?<=[.!?])\s+(?=[А-ЯІЇЄҐA-Z0-9«"(])|(?<=:)\s+(?=[А-ЯІЇЄҐ])/)
+    .map((y) => y.trim())
+    .filter(Boolean);
+
+function extractSpecTables(line: string): Block[] | null {
+  const rows = [...line.matchAll(SPEC_ROW)];
+  if (rows.length < 3) return null;
+  const out: Block[] = [];
+  let table: { caption: string; rows: string[][] } | null = null;
+  let cursor = 0;
+  const flush = () => {
+    if (table) out.push({ t: "table", caption: table.caption, head: SPEC_HEAD, rows: table.rows });
+    table = null;
+  };
+  for (const m of rows) {
+    const gap = line.slice(cursor, m.index).trim();
+    if (gap) {
+      flush();
+      const sents = splitSentences2(gap);
+      let caption = "";
+      const last = sents[sents.length - 1];
+      if (last && /:$/.test(last)) {
+        caption = last.replace(/:$/, "").trim();
+        sents.pop();
+      }
+      for (const x of sents) out.push(/:$/.test(x) ? { t: "h", text: x.replace(/:$/, "") } : { t: "p", lines: [x] });
+      table = { caption, rows: [] };
+    } else if (!table) {
+      table = { caption: "", rows: [] };
+    }
+    table!.rows.push([m[1].trim(), m[2].trim(), m[3].trim()]);
+    cursor = m.index! + m[0].length;
+  }
+  flush();
+  for (const x of splitSentences2(line.slice(cursor).trim())) out.push({ t: "p", lines: [x] });
+  return out;
+}
+
 // ===== Типографіка: дрібні виправлення тексту, щоб він читався охайно і добре вирівнювався =====
 const NBSP = "\u00A0";
 const LET = "А-ЯІЇЄҐа-яіїєґA-Za-z";
@@ -214,6 +266,15 @@ export function hyphenateText(text: string): string {
     .split(RE_SKIP)
     .map((part, i) => (i % 2 === 1 ? part : part.replace(RE_LONG_WORD, hyphenWord)))
     .join("");
+}
+
+// Последнее слово абзаца не остаётся на строке одно: склеиваем его с предыдущим (если вместе недлинно)
+export function tieLast(text: string): string {
+  const m = /^([\s\S]*\S)\s+(\S+)$/.exec(text);
+  if (!m) return text;
+  const prev = /(\S+)$/.exec(m[1]);
+  if (!prev || prev[1].length + m[2].length > 22) return text;
+  return `${m[1]}\u00A0${m[2]}`;
 }
 
 export function typo(text: string): string {
@@ -316,10 +377,26 @@ export function parseDescription(raw: string | null | undefined): Block[] {
     }
     res.push(b);
   }
-  return res.map((b): Block => {
-    if (b.t === "p") return { t: "p", lines: b.lines.map((l) => hyphenateText(typo(l))) };
+  // Таблицы характеристик: абзацы подряд склеиваем и ищем в них строки «6 В – 0,001 В; ±(0,5% + 5d).»
+  const withTables: Block[] = [];
+  for (let i = 0; i < res.length; ) {
+    if (res[i].t !== "p") {
+      withTables.push(res[i++]);
+      continue;
+    }
+    let j = i;
+    while (j < res.length && res[j].t === "p") j++;
+    const run = res.slice(i, j) as Extract<Block, { t: "p" }>[];
+    const tables = extractSpecTables(run.map((b) => b.lines.join(" ")).join(" "));
+    if (tables) withTables.push(...tables);
+    else withTables.push(...run);
+    i = j;
+  }
+  return withTables.map((b): Block => {
+    if (b.t === "table") return { t: "table", caption: typo(b.caption), head: b.head, rows: b.rows.map((r) => r.map(typo)) };
+    if (b.t === "p") return { t: "p", lines: b.lines.map((l) => tieLast(hyphenateText(typo(l)))) };
     if (b.t === "h") return { t: "h", text: typo(b.text) };
-    if (b.t === "ul" || b.t === "ol") return { t: b.t, items: b.items.map((x) => hyphenateText(typo(x))) };
+    if (b.t === "ul" || b.t === "ol") return { t: b.t, items: b.items.map((x) => tieLast(hyphenateText(typo(x)))) };
     return { t: "dl", rows: b.rows.map(([k, v]) => [typo(k), typo(v)] as [string, string]) };
   });
 }

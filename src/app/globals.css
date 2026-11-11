@@ -708,7 +708,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { border-color
   -webkit-hyphens: auto;
   hyphens: auto;
   hyphenate-limit-chars: 6 3 3;
-  text-wrap: pretty;
 }
 h1, h2, h3 { text-wrap: balance; }
 .pdp-description p { white-space: normal; }
@@ -890,3 +889,11 @@ h1, h2, h3 { text-wrap: balance; }
 .adm-prices fieldset { border: var(--border-hairline); border-radius: var(--radius); padding: var(--space-3) var(--space-4); margin: 0 0 var(--space-3); display: grid; gap: var(--space-2); }
 .adm-prices legend { font-weight: 700; padding: 0 var(--space-2); }
 .adm-prices select { max-width: 100%; }
+
+/* ===== Таблиці вимірювальних характеристик в описі (діапазон / роздільна здатність / точність) ===== */
+.rt .spec-wrap { overflow-x: auto; margin: var(--space-3) 0 var(--space-4); }
+.rt table.spec { width: 100%; border-collapse: collapse; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.rt table.spec caption { text-align: left; font-weight: 700; padding: 0 0 var(--space-2); }
+.rt table.spec th, .rt table.spec td { text-align: left; padding: var(--space-2) var(--space-3); border-bottom: var(--border-hairline); white-space: nowrap; }
+.rt table.spec th { background: var(--color-tint); font-weight: 600; font-size: var(--text-xs); color: var(--color-ink-muted); }
+.rt table.spec tbody tr:last-child td { border-bottom: 0; }

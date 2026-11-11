@@ -11,6 +11,20 @@ export default function RichText({ text, className = "" }: { text: string | null
         if (b.t === "h") return <h3 key={i}>{b.text}</h3>;
         if (b.t === "ul") return <ul key={i}>{b.items.map((x, j) => <li key={j}>{x}</li>)}</ul>;
         if (b.t === "ol") return <ol key={i}>{b.items.map((x, j) => <li key={j}>{x}</li>)}</ol>;
+        if (b.t === "table")
+          return (
+            <div key={i} className="spec-wrap">
+              <table className="spec">
+                {b.caption && <caption>{b.caption}</caption>}
+                <thead>
+                  <tr>{b.head.map((h, j) => <th key={j}>{h}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {b.rows.map((r, j) => <tr key={j}>{r.map((c, k) => <td key={k}>{c}</td>)}</tr>)}
+                </tbody>
+              </table>
+            </div>
+          );
         return (
           <dl key={i}>
             {b.rows.map(([k, v], j) => (
