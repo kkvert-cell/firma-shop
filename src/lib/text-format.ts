@@ -201,7 +201,7 @@ function splitSectionHeadings(blocks: Block[]): Block[] {
 
 // ===== Таблицы измерительных характеристик: «6 В – 0,001 В; ±(0,5% + 5d).» → диапазон / разрешение / точность =====
 const MU = "[A-Za-zА-Яа-яІіЇїЄєҐґµμΩ]{1,4}";
-const SPEC_ROW = new RegExp(`(\\d[\\d.,]*\\s?${MU})\\s*[-–—]\\s*(\\d[\\d.,]*\\s?${MU})\\s*;\\s*(±\\s?\\([^)]*\\)|±\\s?[\\d.,]+\\s?%?)\\s*\\.?`, "g");
+const SPEC_ROW = new RegExp(`(\\d[\\d.,]*\\s?${MU})\\s*[-–—]\\s*(\\d[\\d.,]*\\s?${MU})\\s*;\\s*(±\\s?\\([^)]*\\)|±\\s?[\\d.,]+\\s?%?)\\s*[.;]?`, "g");
 const SPEC_HEAD = ["Діапазон", "Роздільна здатність", "Точність"];
 // Предложения; а «Підпис: Наступна назва:» (двокрапка перед словом з великої літери) теж розділяємо
 const splitSentences2 = (x: string) =>
@@ -221,7 +221,8 @@ function extractSpecTables(line: string): Block[] | null {
     table = null;
   };
   for (const m of rows) {
-    const gap = line.slice(cursor, m.index).trim();
+    // Между строками таблицы могут стоять «;» или «.» — это не новый раздел
+    const gap = line.slice(cursor, m.index).replace(/^[\s;,.]+/, "").trim();
     if (gap) {
       flush();
       const sents = splitSentences2(gap);
