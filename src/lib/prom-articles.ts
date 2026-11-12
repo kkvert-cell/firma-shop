@@ -3,21 +3,24 @@
 // Фид большой (две языковые версии описаний), поэтому читаем потоком и держим в памяти только "хвост".
 
 import type { Run } from "./catalog";
+import { normalizeDescription } from "./text-format";
 
 // Один проход по YML: артикулы (vendorCode), группы продавца (<category id parentId>) и группа каждого товара (<categoryId>).
 const TOKEN =
-  /<offer\s[^>]*?\bid="([^"]+)"|<vendorCode>\s*(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*?))\s*<\/vendorCode>|<categoryId>\s*(\d+)\s*<\/categoryId>|<category\s+([^>]*?)>\s*(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*?))\s*<\/category>/g;
+  /<offer\s[^>]*?\bid="([^"]+)"|<vendorCode>\s*(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*?))\s*<\/vendorCode>|<categoryId>\s*(\d+)\s*<\/categoryId>|<category\s+([^>]*?)>\s*(?:<!\[CDATA\[([\s\S]*?)\]\]>|([^<]*?))\s*<\/category>|(<description_ua>)/g;
 
 const decodeEntities = (s: string) =>
   s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;|&#39;/g, "'").replace(/&amp;/g, "&");
 const CARRY = 600;
 
 export type YmlGroup = { id: string; parentId: string | null; name: string; order: number };
-export type YmlScan = { codes: Map<string, string>; offers: number; groups: YmlGroup[]; offerGroup: Map<string, string> };
+export type YmlScan = { codes: Map<string, string>; offers: number; groups: YmlGroup[]; offerGroup: Map<string, string>; descriptions: Map<string, string> };
 
 const attr = (attrs: string, name: string) => new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1] ?? null;
 
-export async function scanYml(stream: ReadableStream<Uint8Array>): Promise<YmlScan> {
+// need — id товарів, для яких потрібен повний український опис (<description_ua>); для інших опис пропускаємо.
+export async function scanYml(stream: ReadableStream<Uint8Array>, need?: Set<string>): Promise<YmlScan> {
+  const descriptions = new Map<string, string>();
   const codes = new Map<string, string>();
   const groups: YmlGroup[] = [];
   const offerGroup = new Map<string, string>();
@@ -30,10 +33,29 @@ export async function scanYml(stream: ReadableStream<Uint8Array>): Promise<YmlSc
   const consume = (flush: boolean) => {
     TOKEN.lastIndex = 0;
     let lastEnd = 0;
+    let keepFrom: number | null = null;
     let m: RegExpExecArray | null;
     while ((m = TOKEN.exec(buf))) {
       lastEnd = TOKEN.lastIndex;
-      if (m[1] !== undefined) {
+      if (m[8] !== undefined) {
+        // початок <description_ua>: беремо вміст лише для потрібних товарів; великий опис може прийти кількома шматками
+        if (current && need?.has(current) && !descriptions.has(current)) {
+          const from = m.index + m[0].length;
+          const end = buf.indexOf("</description_ua>", from);
+          if (end === -1) {
+            if (!flush) {
+              keepFrom = m.index;
+              break;
+            }
+          } else {
+            const raw = buf.slice(from, end).replace(/^\s*<!\[CDATA\[/, "").replace(/\]\]>\s*$/, "");
+            const text = normalizeDescription(raw);
+            if (text) descriptions.set(current, text);
+            TOKEN.lastIndex = end + "</description_ua>".length;
+            lastEnd = TOKEN.lastIndex;
+          }
+        }
+      } else if (m[1] !== undefined) {
         current = m[1];
         offers++;
       } else if (m[4] !== undefined) {
@@ -49,7 +71,7 @@ export async function scanYml(stream: ReadableStream<Uint8Array>): Promise<YmlSc
         if (code) codes.set(current, code);
       }
     }
-    buf = flush ? "" : buf.slice(Math.max(lastEnd, buf.length - CARRY));
+    buf = flush ? "" : buf.slice(keepFrom ?? Math.max(lastEnd, buf.length - CARRY));
   };
 
   for (;;) {
@@ -60,7 +82,7 @@ export async function scanYml(stream: ReadableStream<Uint8Array>): Promise<YmlSc
   }
   buf += decoder.decode();
   consume(true);
-  return { codes, offers, groups, offerGroup };
+  return { codes, offers, groups, offerGroup, descriptions };
 }
 
 // Сумісність зі старим кодом: тільки артикули
@@ -77,6 +99,38 @@ export async function applyVendorCodes(run: Run, codes: Map<string, string>): Pr
        UPDATE "Product" p SET "vendorCode" = x.code, "updatedAt" = now()
        FROM jsonb_to_recordset($1::jsonb) AS x(id text, code text)
        WHERE p."externalId" = x.id AND p."vendorCode" IS DISTINCT FROM x.code
+       RETURNING p.id)
+     SELECT count(*)::int AS changed FROM u`,
+    [JSON.stringify(rows)]
+  );
+  return { found: rows.length, changed: Number(res[0]?.changed ?? 0) };
+}
+
+// Google-фід Prom обрізає довгі описи (≈5000 символів). Для таких товарів беремо повний опис із YML-фіду.
+// Позначка 'description_yml' у lockedFields: опис керується YML (оновлюється щогодини), 'description' захищає його від перезапису Google-фідом.
+const TRUNCATED_FROM = 4500;
+
+export async function descriptionsNeeded(run: Run): Promise<Set<string>> {
+  const rows = await run(
+    `SELECT "externalId" FROM "Product"
+      WHERE "externalId" IS NOT NULL
+        AND ('description_yml' = ANY("lockedFields")
+             OR (char_length(COALESCE(description, '')) >= ${TRUNCATED_FROM} AND NOT ('description' = ANY("lockedFields"))))`
+  );
+  return new Set(rows.map((r) => String(r.externalId)));
+}
+
+export async function applyFullDescriptions(run: Run, descriptions: Map<string, string>): Promise<{ found: number; changed: number }> {
+  const rows = [...descriptions.entries()].map(([id, d]) => ({ id, d }));
+  if (!rows.length) return { found: 0, changed: 0 };
+  const res = await run(
+    `WITH u AS (
+       UPDATE "Product" p SET description = x.d, "updatedAt" = now(),
+              "lockedFields" = (SELECT array_agg(DISTINCT e) FROM unnest(p."lockedFields" || ARRAY['description', 'description_yml']) e)
+       FROM jsonb_to_recordset($1::jsonb) AS x(id text, d text)
+       WHERE p."externalId" = x.id
+         AND (('description_yml' = ANY(p."lockedFields") AND p.description IS DISTINCT FROM x.d)
+              OR (NOT ('description' = ANY(p."lockedFields")) AND char_length(x.d) > char_length(COALESCE(p.description, '')) + 20))
        RETURNING p.id)
      SELECT count(*)::int AS changed FROM u`,
     [JSON.stringify(rows)]

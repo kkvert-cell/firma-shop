@@ -9,7 +9,7 @@ import type { Run } from "./catalog";
 import { getState, setState } from "./sync-state";
 import { NAME_FIXES, toUkrainian } from "./ru-uk";
 import { slugify } from "./prom-feed";
-import { applyVendorCodes, scanYml, type YmlScan } from "./prom-articles";
+import { applyFullDescriptions, applyVendorCodes, descriptionsNeeded, scanYml, type YmlScan } from "./prom-articles";
 
 export type CatalogMode = "legacy" | "groups";
 
@@ -168,11 +168,13 @@ export async function applyGroups(run: Run, scan: YmlScan, mode: CatalogMode): P
 export async function syncYml(run: Run, feedUrl: string) {
   const res = await fetch(feedUrl, { cache: "no-store", headers: { "user-agent": "firma-shop-sync/1.0" } });
   if (!res.ok || !res.body) throw new Error(`YML не відкрився (код ${res.status})`);
-  const scan = await scanYml(res.body);
+  const need = await descriptionsNeeded(run);
+  const scan = await scanYml(res.body, need);
   const codes = await applyVendorCodes(run, scan.codes);
   const mode = await getCatalogMode(run);
   const groups = await applyGroups(run, scan, mode);
-  return { offers: scan.offers, ...codes, groups };
+  const descriptions = await applyFullDescriptions(run, scan.descriptions);
+  return { offers: scan.offers, ...codes, groups, descriptions };
 }
 
 // ---------- 3. Перемикання каталогу на групи й назад ----------
