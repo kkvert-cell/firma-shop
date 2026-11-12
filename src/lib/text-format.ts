@@ -72,7 +72,7 @@ function isRangeMark(line: string, m: RegExpMatchArray): boolean {
   const before = line.slice(0, m.index).trimEnd();
   const after = line.slice(m.index! + m[0].length);
   // «6 В - 0,001 В», «40 Гц - 1 кГц», «3.5 - 9.0»: слева число (с единицей), справа тоже число
-  return /\d[\d.,\s]*[A-Za-zА-Яа-яІіЇїЄєҐґµμΩ°%/]{0,5}$/.test(before) && /^[\d+]/.test(after);
+  return /\d[\d.,\s]*[A-Za-zА-Яа-яІіЇїЄєҐґµμΩ°%/.]{0,12}$/.test(before) && /^[\d+]/.test(after);
 }
 
 // «3.5 - 9.0» → «3.5–9.0»: диапазон чисел пишем с короткой чертой без пробелов
@@ -80,7 +80,7 @@ const RANGE = /(\d(?:\s?(?:%|°[CFС]))?)\s+[-–—−]\s+(?=\d)/g;
 let rangeUnits: RegExp | null = null;
 export const tidyRanges = (s: string) => {
   // «40 Гц - 1 кГц» → «40 Гц–1 кГц»
-  rangeUnits ??= new RegExp(`(\\d(?:[.,]\\d+)?\\s?(?:${UNITS})(?![${LET}]))\\s+[-–—−]\\s+(?=\\d)`, "g");
+  rangeUnits ??= new RegExp(`(\\d(?:[.,]\\d+)?\\s?[A-Za-zА-Яа-яІіЇїЄєҐґµμΩ°%/.]{1,12})\\s+[-–—−]\\s+(?=\\d)`, "g");
   return s.replace(RANGE, "$1–").replace(rangeUnits, "$1–");
 };
 
@@ -155,6 +155,49 @@ function expandInlineList(line: string): string {
   return out.join("\n");
 }
 
+
+// ===== «…навчання. Характеристики: Осцилограф» внутри пункта списка — это начало нового раздела, а не продолжение пункта =====
+const SECTION_IN_ITEM = /^([\s\S]*?[.!?])\s+((?:Технічні\s+)?(?:Характеристики|Комплектація|Параметри|Переваги|Особливості|Застосування|Специфікація|Технічні\s+дані)):\s*([\s\S]*)$/;
+
+// Второй конец диапазона, ставший отдельным пунктом («Часова база: 20 нс/поділка» + «20 с/поділка»), склеиваем обратно
+const VALUE_ONLY = /^\d[\d.,\s]*[A-Za-zА-Яа-яІіЇїЄєҐґµμΩ°%/.]{0,12}$/;
+const ENDS_WITH_VALUE = /\d[\d.,\s]*[A-Za-zА-Яа-яІіЇїЄєҐґµμΩ°%/.]{0,12}$/;
+function mergeRangeItems(items: string[]): string[] {
+  const out: string[] = [];
+  for (const it of items) {
+    const x = it.trim();
+    const prev = out[out.length - 1];
+    if (prev !== undefined && VALUE_ONLY.test(x) && /: /.test(prev) && ENDS_WITH_VALUE.test(prev) && prev.length < 90) {
+      out[out.length - 1] = `${prev}–${x}`;
+    } else out.push(it);
+  }
+  return out;
+}
+
+function splitSectionHeadings(blocks: Block[]): Block[] {
+  const out: Block[] = [];
+  for (const b0 of blocks) {
+    const b: Block = b0.t === "ul" || b0.t === "ol" ? { t: b0.t, items: mergeRangeItems(b0.items) } : b0;
+    if (b.t !== "ul" && b.t !== "ol") {
+      out.push(b);
+      continue;
+    }
+    let items: string[] = [];
+    for (const it of b.items) {
+      const m = SECTION_IN_ITEM.exec(it);
+      if (!m) {
+        items.push(it);
+        continue;
+      }
+      items.push(m[1].trim());
+      out.push({ t: b.t, items });
+      out.push({ t: "h", text: m[2] });
+      items = m[3].trim() ? [m[3].trim()] : [];
+    }
+    if (items.length) out.push({ t: b.t, items });
+  }
+  return out;
+}
 
 // ===== Таблицы измерительных характеристик: «6 В – 0,001 В; ±(0,5% + 5d).» → диапазон / разрешение / точность =====
 const MU = "[A-Za-zА-Яа-яІіЇїЄєҐґµμΩ]{1,4}";
@@ -355,7 +398,7 @@ export function parseDescription(raw: string | null | undefined): Block[] {
   flushAll();
 
   // Длинный абзац из одной строки делим по предложениям, чтобы текст читался
-  const res: Block[] = [];
+  let res: Block[] = [];
   for (const b of blocks) {
     if (b.t === "p" && b.lines.length === 1 && b.lines[0].length > 420) {
       const sentences = splitSentences(b.lines[0]);
@@ -379,6 +422,7 @@ export function parseDescription(raw: string | null | undefined): Block[] {
   }
   // Таблицы характеристик: абзацы подряд склеиваем и ищем в них строки «6 В – 0,001 В; ±(0,5% + 5d).»
   const withTables: Block[] = [];
+  res = splitSectionHeadings(res);
   const hasSpec = (x: string) => [...x.matchAll(SPEC_ROW)].length >= 3;
   for (let i = 0; i < res.length; ) {
     const cur = res[i];
