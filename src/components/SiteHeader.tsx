@@ -24,10 +24,10 @@ export default async function SiteHeader() {
   return (
     <header className="site-header">
       <div className="site-header-inner">
-        <Link href="/" className="brand" aria-label="Firma Vymir — на головну">
+        <Link href="/" className="brand" aria-label="Firma SHOP — на головну">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/mark-64.png" width={36} height={36} alt="" />
-          <span className="brand-text"><small>FIRMA</small><b>VYMIR</b></span>
+          <span className="brand-text"><small>FIRMA</small><b>SHOP</b></span>
         </Link>
         <CatalogMenu groups={groups} />
         <SearchBox className="header-search" placeholder="Назва або артикул" />

@@ -1,6 +1,6 @@
 // Общие константы сайта. Основний домен: firmashop.com.ua (можна перевизначити через NEXT_PUBLIC_SITE_URL у налаштуваннях збірки).
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL ?? "https://firmashop.com.ua").replace(/\/$/, "");
-export const SITE_NAME = "Firma Vymir";
+export const SITE_NAME = "Firma SHOP";
 export const SHOP_PHONE = "+380968623435";
 export const SHOP_PHONE_TEXT = "+38 (096) 862-34-35";
 

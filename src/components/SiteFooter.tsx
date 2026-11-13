@@ -9,7 +9,7 @@ export default function SiteFooter() {
       <div className="footer-brand" aria-hidden="true">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/brand/mark-64.png" width={28} height={28} alt="" />
-        <span className="brand-text"><small>FIRMA</small><b>VYMIR</b></span>
+        <span className="brand-text"><small>FIRMA</small><b>SHOP</b></span>
       </div>
       <nav aria-label="Умови">
         {legalPages().filter((p) => p.slug !== "black-friday").map((p) => (
