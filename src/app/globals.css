@@ -709,6 +709,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { border-color
   hyphens: auto;
   hyphenate-limit-chars: 6 3 3;
 }
+/* Пункти з ланцюжком значень через слеш: по ширині розтягуються дірами, тому вирівнюємо по лівому краю */
+.rt li.nj { text-align: left; }
 h1, h2, h3 { text-wrap: balance; }
 .pdp-description p { white-space: normal; }
 .seo-text.rt { margin-top: var(--space-6); color: var(--color-ink-muted); font-size: var(--text-sm); }

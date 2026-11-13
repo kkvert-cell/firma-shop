@@ -84,8 +84,41 @@ export const tidyRanges = (s: string) => {
   return s.replace(RANGE, "$1–").replace(rangeUnits, "$1–");
 };
 
+// Нумерований список, «склеєний» в один рядок: «Особливості: 1. Перше… 2. Друге… 3. Третє…».
+// Береться лише ланцюжок 1, 2, 3… підряд, перед кожним номером має стояти кінець речення або двокрапка.
+const NUM_MARK = new RegExp(`(^|\\s)(\\d{1,2})[.)]\\s+(?=[А-ЯІЇЄҐA-Z«"(])`, "g");
+function expandNumberedList(line: string): string {
+  if (line.length < 40) return line;
+  const chain: RegExpMatchArray[] = [];
+  let want = 1;
+  for (const m of line.matchAll(NUM_MARK)) {
+    if (Number(m[2]) !== want) continue;
+    const before = line.slice(0, m.index).trimEnd();
+    if (before && !/[.!?;:…)]$/.test(before)) continue;
+    chain.push(m);
+    want++;
+  }
+  if (chain.length < 2) return line;
+  const head = line.slice(0, chain[0].index).trim();
+  const out: string[] = [];
+  if (head) {
+    const hh = new RegExp(`^(.*[.!?])\\s+([${UP}][^.!?]{1,50}:)$`).exec(head);
+    if (hh) out.push(hh[1], "", hh[2]);
+    else out.push(head);
+  }
+  chain.forEach((m, i) => {
+    const start = m.index! + m[0].length;
+    const end = i + 1 < chain.length ? chain[i + 1].index! : line.length;
+    const t = line.slice(start, end).trim().replace(/[;\s]+$/, "");
+    if (t) out.push(`${i + 1}. ${t}`);
+  });
+  return out.join("\n");
+}
+
 function expandInlineList(line: string): string {
   if (line.length < 30) return line;
+  const numbered = expandNumberedList(line);
+  if (numbered !== line) return numbered;
   let marks = [...line.matchAll(INLINE_MARK)].filter((m) => !isRangeMark(line, m));
   // Тире внутри пункта («…натисніть кнопку - результати з'являться…», «…умовах - вдома, у саду…») — не новий пункт.
   // Надёжный маркер: в начале строки, после «. ; : ! ?» или перед словом с заглавной буквы. Если таких маркеров в строке
@@ -271,7 +304,10 @@ function typoPart(t: string): string {
     .replace(RE_NUM_UNIT, `$1${NBSP}`) // число + одиниця не розриваються
     .replace(/(^|\S) [-–] (?=\S)/g, `$1${NBSP}— `) // «908V - це» → «908V — це»
     .replace(/(\d{1,3}) (?=\d{3}(?!\d))/g, `$1${NBSP}`) // 1 150 ₴ — тисячі не розриваються
-    .replace(RE_SHORT_WORD, `$1$2${NBSP}`); // однолітерні слова (в, у, з, і, й…) не лишаються в кінці рядка
+    .replace(RE_SHORT_WORD, `$1$2${NBSP}`) // однолітерні слова (в, у, з, і, й…) не лишаються в кінці рядка
+    .replace(/(?<=[A-Za-zА-Яа-яІіЇїЄєҐґ°%)])\/(?=[\d±−-])/g, "/\u200B") // «Ом/6000 кОм/60 кОм…»: після слеша можна переносити
+    .replace(/±\s+(?=[\d(])/g, `±${NBSP}`) // «± (1,0% + 5)» не розривається після ±
+    .replace(/(\d[%dD]?) \+ (?=\d)/g, `$1${NBSP}+${NBSP}`); // «1,0% + 5» не розривається навколо плюса
 }
 
 
