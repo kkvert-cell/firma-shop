@@ -11,7 +11,7 @@ export type Block =
   | { t: "dl"; rows: [string, string][] }
   | { t: "table"; caption: string; head: string[]; rows: string[][] };
 
-const NAMED: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", laquo: "«", raquo: "»", ndash: "–", mdash: "—", hellip: "…", deg: "°", times: "×", plusmn: "±", micro: "µ", bull: "•" };
+const NAMED: Record<string, string> = { nbsp: " ", amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", laquo: "«", raquo: "»", ndash: "–", mdash: "—", hellip: "…", deg: "°", times: "×", plusmn: "±", micro: "µ", bull: "•", middot: "·", ohm: "Ω", copy: "©", reg: "®", trade: "™", euro: "€", frac12: "½", sup2: "²", sup3: "³", infin: "∞", le: "≤", ge: "≥", ne: "≠", asymp: "≈", rarr: "→", larr: "←", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", bdquo: "„", minus: "−", thinsp: " ", ensp: " ", emsp: " ", shy: "", oacute: "ó", eacute: "é" };
 const decodeEntities = (s: string) =>
   s
     .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
@@ -212,7 +212,7 @@ const splitSentences2 = (x: string) =>
 
 function extractSpecTables(line: string): Block[] | null {
   const rows = [...line.matchAll(SPEC_ROW)];
-  if (rows.length < 3) return null;
+  if (rows.length < 2) return null;
   const out: Block[] = [];
   let table: { caption: string; rows: string[][] } | null = null;
   let cursor = 0;
@@ -424,7 +424,7 @@ export function parseDescription(raw: string | null | undefined): Block[] {
   // Таблицы характеристик: абзацы подряд склеиваем и ищем в них строки «6 В – 0,001 В; ±(0,5% + 5d).»
   const withTables: Block[] = [];
   res = splitSectionHeadings(res);
-  const hasSpec = (x: string) => [...x.matchAll(SPEC_ROW)].length >= 3;
+  const hasSpec = (x: string) => [...x.matchAll(SPEC_ROW)].length >= 2;
   for (let i = 0; i < res.length; ) {
     const cur = res[i];
     if ((cur.t === "ul" || cur.t === "ol") && cur.items.some(hasSpec)) {
@@ -453,7 +453,24 @@ export function parseDescription(raw: string | null | undefined): Block[] {
     else withTables.push(...run);
     i = j;
   }
-  return withTables.map((b): Block => {
+  // «Вимірювані величини (…):» окремим рядком перед таблицею чи списком — це заголовок, а не абзац
+  const headed = withTables.map((b, i): Block => {
+    const next = withTables[i + 1];
+    if (b.t === "p" && b.lines.length === 1 && /:$/.test(b.lines[0]) && b.lines[0].length <= 100 && next && ["table", "ul", "ol", "h"].includes(next.t)) {
+      return { t: "h", text: b.lines[0].replace(/:$/, "") };
+    }
+    return b;
+  });
+  // Короткий рядок («Напруга AC/DC») прямо перед таблицею — це її підпис
+  const captioned: Block[] = [];
+  for (const b of headed) {
+    const prev = captioned[captioned.length - 1];
+    if (b.t === "table" && !b.caption && prev && prev.t === "p" && prev.lines.length === 1 && prev.lines[0].length <= 60 && !/[.!?:;]$/.test(prev.lines[0])) {
+      captioned.pop();
+      captioned.push({ ...b, caption: prev.lines[0] });
+    } else captioned.push(b);
+  }
+  return captioned.map((b): Block => {
     if (b.t === "table") return { t: "table", caption: typo(b.caption), head: b.head, rows: b.rows.map((r) => r.map(typo)) };
     if (b.t === "p") return { t: "p", lines: b.lines.map((l) => tieLast(hyphenateText(typo(l)))) };
     if (b.t === "h") return { t: "h", text: typo(b.text) };
