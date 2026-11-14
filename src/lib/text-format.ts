@@ -93,12 +93,18 @@ function expandNumberedList(line: string): string {
   let want = 1;
   for (const m of line.matchAll(NUM_MARK)) {
     if (Number(m[2]) !== want) continue;
-    const before = line.slice(0, m.index).trimEnd();
-    if (before && !/[.!?;:…)]$/.test(before)) continue;
     chain.push(m);
     want++;
   }
   if (chain.length < 2) return line;
+  // перед номером має стояти кінець речення або двокрапка; для «1) … 2) …» і списків від 3 пунктів це не обов'язково
+  const strict = chain.length < 3 && !chain.every((m) => m[0].includes(")"));
+  if (strict) {
+    for (const m of chain) {
+      const before = line.slice(0, m.index).trimEnd();
+      if (before && !/[.!?;:…)]$/.test(before)) return line;
+    }
+  }
   const head = line.slice(0, chain[0].index).trim();
   const out: string[] = [];
   if (head) {
@@ -115,10 +121,31 @@ function expandNumberedList(line: string): string {
   return out.join("\n");
 }
 
+// Характеристики в один рядок через «;»: «Характеристики: Модель: X; Напруга: 24 В; Колір: чорний» → заголовок і список
+const KV_SEG = /^[^:;]{2,45}:\s*\S/;
+function expandKvChain(line: string): string {
+  if (line.length < 60 || !line.includes(";")) return line;
+  const segs = line.split(/;\s+/).map((x) => x.trim()).filter(Boolean);
+  if (segs.length < 3) return line;
+  let head = "";
+  const hh = new RegExp(`^([${UP}][^:;.]{2,40}):\\s+(?=[^:;]{2,45}:\\s*\\S)`).exec(segs[0]);
+  if (hh) {
+    head = hh[1] + ":";
+    segs[0] = segs[0].slice(hh[0].length);
+  }
+  if (segs.filter((x) => KV_SEG.test(x)).length < Math.max(3, Math.ceil(segs.length * 0.75))) return line;
+  const out: string[] = [];
+  if (head) out.push(head);
+  segs.forEach((x) => out.push(`• ${x.replace(/[.;]\s*$/, "")}`));
+  return out.join("\n");
+}
+
 function expandInlineList(line: string): string {
   if (line.length < 30) return line;
   const numbered = expandNumberedList(line);
   if (numbered !== line) return numbered;
+  const kv = expandKvChain(line);
+  if (kv !== line) return kv;
   let marks = [...line.matchAll(INLINE_MARK)].filter((m) => !isRangeMark(line, m));
   // Тире внутри пункта («…натисніть кнопку - результати з'являться…», «…умовах - вдома, у саду…») — не новий пункт.
   // Надёжный маркер: в начале строки, после «. ; : ! ?» или перед словом с заглавной буквы. Если таких маркеров в строке
@@ -225,7 +252,12 @@ function splitSectionHeadings(blocks: Block[]): Block[] {
       items.push(m[1].trim());
       out.push({ t: b.t, items });
       out.push({ t: "h", text: m[2] });
-      items = m[3].trim() ? [m[3].trim()] : [];
+      items = [];
+      const rest = m[3].trim();
+      if (rest) {
+        if (b.t === "ol") out.push({ t: "p", lines: [rest] }); // у нумерованому списку текст після заголовка розділу — абзац, а не «1.»
+        else items = [rest];
+      }
     }
     if (items.length) out.push({ t: b.t, items });
   }
@@ -301,6 +333,8 @@ function typoPart(t: string): string {
     .replace(RE_COMMA_LETTER, ", ") // пропущений пробіл після коми
     .replace(/([а-яіїєґ])\.(?=[А-ЯІЇЄҐ])/g, "$1. ") // «екрані.Паяльник» → «екрані. Паяльник»
     .replace(RE_NUM_RANGE, "$1–$2") // 180-500 °С → 180–500 °С
+    .replace(new RegExp(`([${LET}]):(?=[\\dA-ZА-ЯІЇЄҐ])`, "gu"), "$1: ") // «Розмір:155» → «Розмір: 155»
+    .replace(new RegExp(`(?<![${LET}\\d])(\\d+(?:[.,]\\d+)?)(?=(?:В|А|мА|мВ|кВ|Вт|кВт|Гц|кГц|МГц|мм|см|кг|мг|мл|Ом|кОм|МОм|хв|шт)(?![${LET}]))`, "gu"), "$1 ") // «1000В» → «1000 В»
     .replace(RE_NUM_UNIT, `$1${NBSP}`) // число + одиниця не розриваються
     .replace(/(^|\S) [-–] (?=\S)/g, `$1${NBSP}— `) // «908V - це» → «908V — це»
     .replace(/(\d{1,3}) (?=\d{3}(?!\d))/g, `$1${NBSP}`) // 1 150 ₴ — тисячі не розриваються

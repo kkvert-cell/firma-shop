@@ -44,7 +44,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
   }
   if (!data) notFound();
 
-  const { product: p, images, attrs, related, crumbs } = data;
+  const { product: p, images, related, crumbs } = data;
   const imageUrls = images.map((i) => i.url);
   const discount = p.oldPrice && p.oldPrice > p.price && p.price > 0 ? Math.round((1 - p.price / p.oldPrice) * 100) : 0;
 
@@ -125,22 +125,6 @@ export default async function ProductPage({ params, searchParams }: Props) {
               <li><Icon name="phone" /><span><b>Консультація</b><a href={`tel:${SHOP_PHONE}`} className="data">{SHOP_PHONE_TEXT}</a></span></li>
             </ul>
           </div>
-
-          {attrs.length > 0 && (
-            <>
-              <h2 className="heading section-title">Характеристики</h2>
-              <table className="specs">
-                <tbody>
-                  {attrs.map((a, i) => (
-                    <tr key={i}>
-                      <td className="muted">{a.name}</td>
-                      <td className="data">{a.value}{a.unit ? ` ${a.unit}` : ""}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
         </div>
       </div>
 
