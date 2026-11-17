@@ -21,7 +21,7 @@ export default async function AdminOrder({ params, searchParams }: { params: Pro
   const rows = await run(
     `SELECT o.id, o."orderNumber", o."createdAt"::text AS "createdAt", o.status::text AS status, o."firstName", o."lastName", o.phone, o.email,
             o.comment, o."totalAmount"::float8 AS total, o."keycrmOrderId", o."keycrmAttempts", o."keycrmError", o."clientToken" AS token,
-            s.carrier::text AS carrier, s.city, s.warehouse, p.method::text AS method, p.status::text AS "payStatus", p."providerRef",
+            s.carrier::text AS carrier, s.city, s.warehouse, s."trackingId" AS ttn, p.method::text AS method, p.status::text AS "payStatus", p."providerRef",
             p."paidAt"::text AS "paidAt"
      FROM "Order" o LEFT JOIN "Shipment" s ON s."orderId" = o.id LEFT JOIN "Payment" p ON p."orderId" = o.id
      WHERE o."orderNumber" = $1`,
@@ -44,7 +44,8 @@ export default async function AdminOrder({ params, searchParams }: { params: Pro
       <p><Link href="/admin/orders">← Усі замовлення</Link></p>
       <h1 className="heading page-title">Замовлення {String(o.orderNumber)}</h1>
       {sp.ok && NOTE[sp.ok] && <p className="notice">{NOTE[sp.ok]}</p>}
-      {sp.err && <p className="notice error">Не вдалося передати в KeyCRM: {sp.err}</p>}
+      {sp.err === "ttn" && <p className="notice error">ТТН має містити від 8 до 30 цифр або літер. Статус збережено, ТТН ні.</p>}
+      {sp.err && sp.err !== "ttn" && <p className="notice error">Не вдалося передати в KeyCRM: {sp.err}</p>}
 
       <div className="adm-chips">
         <span className="chip mute">{STATUS_LABEL[String(o.status)] ?? String(o.status)}</span>
@@ -100,13 +101,14 @@ export default async function AdminOrder({ params, searchParams }: { params: Pro
       </section>
 
       <section className="card adm-block">
-        <h2 className="heading section-title">Статус на сайті</h2>
-        <p className="muted small">Основна робота з замовленням ведеться в KeyCRM; цей статус потрібен лише для огляду тут.</p>
+        <h2 className="heading section-title">Статус і ТТН для покупця</h2>
+        <p className="muted small">Основна робота з замовленням ведеться в KeyCRM, але статус і ТТН покупець бачить у своєму кабінеті.</p>
         <form action="/api/admin/orders/status" method="post" className="adm-inline">
           <input type="hidden" name="number" value={String(o.orderNumber)} />
           <select name="status" defaultValue={String(o.status)}>
             {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
           </select>
+          <input type="text" name="ttn" defaultValue={o.ttn ? String(o.ttn) : ""} placeholder="ТТН (необов'язково)" maxLength={30} inputMode="numeric" />
           <button type="submit" className="btn-primary">Зберегти</button>
         </form>
       </section>

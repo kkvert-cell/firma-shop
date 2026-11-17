@@ -7,6 +7,7 @@ import { formatPrice } from "@/lib/site";
 import { thumb } from "@/lib/image";
 import type { CartLine } from "@/lib/cart";
 import ReorderButton from "@/components/ReorderButton";
+import AccountNav from "@/components/AccountNav";
 
 export const metadata: Metadata = { title: "Особистий кабінет", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -26,7 +27,13 @@ const MSG: Record<string, string> = {
   off: "Вхід тимчасово недоступний.",
 };
 
-type Search = { sent?: string; e?: string };
+type Search = { sent?: string; e?: string; deleted?: string };
+
+// Посилання на відстеження посилки за ТТН
+const TRACK: Record<string, (n: string) => string> = {
+  NOVA_POSHTA: (n) => `https://novaposhta.ua/tracking/?cargo_number=${encodeURIComponent(n)}`,
+  UKRPOSHTA: (n) => `https://track.ukrposhta.ua/tracking_UA.html?barcode=${encodeURIComponent(n)}`,
+};
 
 export default async function AccountPage({ searchParams }: { searchParams: Promise<Search> }) {
   const sp = await searchParams;
@@ -47,6 +54,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
       <main className="adm-login">
         <h1 className="heading page-title">Особистий кабінет</h1>
         <p className="muted">Введіть e-mail, який ви вказували в замовленні, і ми надішлемо посилання для входу. Пароль не потрібен.</p>
+        {sp.deleted && <p className="notice">Ваш профіль і збережені адреси видалено.</p>}
         {sp.sent && <p className="notice">Якщо за цією адресою є замовлення, ми надіслали лист із посиланням. Перевірте пошту (і папку «Спам»).</p>}
         {sp.e && MSG[sp.e] && <p className="notice error">{MSG[sp.e]}</p>}
         <form action="/api/account/login" method="post" className="checkout-form">
@@ -62,7 +70,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   const run = getRunner();
   const orders = await run(
     `SELECT o.id, o."orderNumber", o."createdAt"::text AS "createdAt", o.status::text AS status, o."totalAmount"::float8 AS total, o."clientToken" AS token,
-            s.carrier::text AS carrier, s.city, s.warehouse, p.method::text AS method, p.status::text AS "payStatus"
+            s.carrier::text AS carrier, s.city, s.warehouse, s."trackingId" AS ttn, p.method::text AS method, p.status::text AS "payStatus"
      FROM "Order" o LEFT JOIN "Shipment" s ON s."orderId" = o.id LEFT JOIN "Payment" p ON p."orderId" = o.id
      WHERE lower(o.email) = $1 ORDER BY o."createdAt" DESC LIMIT 30`,
     [email]
@@ -82,6 +90,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
   return (
     <main className="adm-main">
       <h1 className="heading page-title">Мої замовлення</h1>
+      <AccountNav active="orders" />
       <p className="muted small">
         {email} ·{" "}
         <form action="/api/account/logout" method="post" style={{ display: "inline" }}>
@@ -119,6 +128,17 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
               ))}
             </ul>
             <p className="muted small">{CARRIER[String(o.carrier)] ?? String(o.carrier)}: {String(o.city)}, {String(o.warehouse)}</p>
+            {o.ttn ? (
+              <p className="small">
+                ТТН: <b className="data">{String(o.ttn)}</b>
+                {TRACK[String(o.carrier)] && (
+                  <>
+                    {" "}·{" "}
+                    <a href={TRACK[String(o.carrier)](String(o.ttn))} target="_blank" rel="noopener noreferrer">Відстежити посилку</a>
+                  </>
+                )}
+              </p>
+            ) : null}
             <div className="adm-inline">
               <Link href={`/order/${o.orderNumber}?t=${encodeURIComponent(String(o.token))}`} className="btn-secondary">Деталі</Link>
               <ReorderButton lines={lines} />

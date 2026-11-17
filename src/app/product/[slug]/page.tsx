@@ -8,6 +8,7 @@ import ProductGallery from "@/components/ProductGallery";
 import Icon from "@/components/Icon";
 import RichText from "@/components/RichText";
 import AddToCart from "@/components/AddToCart";
+import WishButton from "@/components/WishButton";
 import { SITE_NAME, SITE_URL, SHOP_PHONE, SHOP_PHONE_TEXT, formatPrice } from "@/lib/site";
 import { jsonLd, productJsonLd, productMetadata, breadcrumbJsonLd } from "@/lib/seo";
 import { loadProduct } from "@/lib/catalog";
@@ -118,6 +119,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
                 maxQty: p.stockExact && p.stockQty > 0 ? p.stockQty : 99,
               }}
             />
+            <p><WishButton id={p.id} /></p>
             <ul className="benefits">
               <li><Icon name="truck" /><span><b>Доставка по Україні</b>Нова пошта або Укрпошта</span></li>
               <li><Icon name="card" /><span><b>Оплата</b>При отриманні або за реквізитами</span></li>
