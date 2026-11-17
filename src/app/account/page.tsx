@@ -8,6 +8,7 @@ import { thumb } from "@/lib/image";
 import type { CartLine } from "@/lib/cart";
 import ReorderButton from "@/components/ReorderButton";
 import AccountNav from "@/components/AccountNav";
+import { statusTone } from "@/lib/admin-format";
 
 export const metadata: Metadata = { title: "Особистий кабінет", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
@@ -116,7 +117,7 @@ export default async function AccountPage({ searchParams }: { searchParams: Prom
             <h2 className="heading section-title">Замовлення {String(o.orderNumber)}</h2>
             <p className="muted small">{fmtDate(o.createdAt)} · {formatPrice(Number(o.total))} ₴</p>
             <div className="adm-chips">
-              <span className="chip mute">{STATUS[String(o.status)] ?? String(o.status)}</span>
+              <span className={`chip ${statusTone(o.status)}`}>{STATUS[String(o.status)] ?? String(o.status)}</span>
               <span className={`chip ${pc.tone}`}>{pc.text}</span>
             </div>
             <ul className="adm-items">

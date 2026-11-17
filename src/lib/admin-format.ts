@@ -7,6 +7,8 @@ export const STATUS_LABEL: Record<string, string> = {
   CANCELLED: "Скасовано",
 };
 export const STATUSES = Object.keys(STATUS_LABEL);
+// Колір позначки статусу: нове / підтверджено / в обробці — жовтий, відправлено / доставлено — зелений, скасовано — червоний
+export const statusTone = (s: unknown): string => (s === "SHIPPED" || s === "DELIVERED" ? "ok" : s === "CANCELLED" ? "bad" : "warn");
 export const PAY_LABEL: Record<string, string> = { CASH_ON_DELIVERY: "накладений платіж", BANK_TRANSFER: "за реквізитами", ONLINE_CARD: "картка онлайн" };
 export const CARRIER_LABEL: Record<string, string> = { NOVA_POSHTA: "Нова пошта", UKRPOSHTA: "Укрпошта", SAT: "САТ", OTHER: "Інше" };
 
@@ -34,6 +36,6 @@ export function keycrmChip(o: { keycrmOrderId?: unknown; keycrmAttempts?: unknow
   if (String(o.method) === "ONLINE_CARD" && String(o.payStatus) !== "PAID") return { text: "піде в KeyCRM після оплати", tone: "mute" };
   const n = Number(o.keycrmAttempts ?? 0);
   if (n >= 99) return { text: "не передається (старе)", tone: "mute" };
-  if (n >= 6) return { text: "НЕ в KeyCRM", tone: "bad" };
+  if (n >= 6) return { text: "НЕ в KeyCRM", tone: "mute" };
   return { text: "ще не в KeyCRM", tone: "warn" };
 }

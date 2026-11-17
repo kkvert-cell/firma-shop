@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getRunner } from "@/lib/catalog";
 import { formatPrice } from "@/lib/site";
-import { CARRIER_LABEL, fmtDate, keycrmChip, payChip, STATUSES, STATUS_LABEL } from "@/lib/admin-format";
+import { CARRIER_LABEL, fmtDate, keycrmChip, payChip, STATUSES, STATUS_LABEL, statusTone } from "@/lib/admin-format";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +48,7 @@ export default async function AdminOrder({ params, searchParams }: { params: Pro
       {sp.err && sp.err !== "ttn" && <p className="notice error">Не вдалося передати в KeyCRM: {sp.err}</p>}
 
       <div className="adm-chips">
-        <span className="chip mute">{STATUS_LABEL[String(o.status)] ?? String(o.status)}</span>
+        <span className={`chip ${statusTone(o.status)}`}>{STATUS_LABEL[String(o.status)] ?? String(o.status)}</span>
         <span className={`chip ${pc.tone}`}>{pc.text}</span>
         <span className={`chip ${kc.tone}`}>{kc.text}</span>
       </div>

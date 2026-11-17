@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getRunner } from "@/lib/catalog";
 import { formatPrice } from "@/lib/site";
-import { fmtDate, keycrmChip, payChip, STATUS_LABEL } from "@/lib/admin-format";
+import { fmtDate, keycrmChip, payChip, STATUS_LABEL, statusTone } from "@/lib/admin-format";
 import { getState } from "@/lib/sync-state";
 import { loadPromState } from "@/lib/prom-refresh";
 
@@ -79,7 +79,7 @@ export default async function AdminDashboard() {
                 <span className="adm-row-main"><b>{String(o.orderNumber)}</b> · {String(o.lastName)} {String(o.firstName)}</span>
                 <span className="adm-row-sub">{fmtDate(o.createdAt)} · {formatPrice(Number(o.total))} ₴</span>
                 <span className="adm-chips">
-                  <span className="chip mute">{STATUS_LABEL[String(o.status)] ?? String(o.status)}</span>
+                  <span className={`chip ${statusTone(o.status)}`}>{STATUS_LABEL[String(o.status)] ?? String(o.status)}</span>
                   <span className={`chip ${pc.tone}`}>{pc.text}</span>
                   <span className={`chip ${kc.tone}`}>{kc.text}</span>
                 </span>
