@@ -18,7 +18,8 @@ export async function POST(req: NextRequest) {
   if (!email) return back(req, "e=email");
   try {
     const run = getRunner();
-    if (await allowLoginRequest(run, email)) {
+    const ip = req.headers.get("cf-connecting-ip") ?? req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null;
+    if (await allowLoginRequest(run, email, ip)) {
       const has = await run(`SELECT 1 AS x FROM "Order" WHERE lower(email) = $1 LIMIT 1`, [email]);
       if (has.length) {
         const link = `${SITE_URL}/account/verify?t=${encodeURIComponent(makeLoginToken(email))}`;

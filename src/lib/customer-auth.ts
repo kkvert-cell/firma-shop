@@ -78,8 +78,9 @@ async function hit(run: Run, key: string, windowMin: number, max: number): Promi
   return true;
 }
 
-export async function allowLoginRequest(run: Run, email: string): Promise<boolean> {
-  const per = await hit(run, `login_req:${createHash("sha256").update(email).digest("hex").slice(0, 16)}`, 15, 3);
-  if (!per) return false;
-  return hit(run, "login_req_all", 60, 80);
+export async function allowLoginRequest(run: Run, email: string, ip?: string | null): Promise<boolean> {
+  const h = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
+  if (ip && !(await hit(run, `login_ip:${h(ip)}`, 15, 10))) return false; // один пристрій не може заблокувати вхід усім
+  if (!(await hit(run, `login_req:${h(email)}`, 15, 3))) return false;
+  return hit(run, "login_req_all", 60, 300);
 }
