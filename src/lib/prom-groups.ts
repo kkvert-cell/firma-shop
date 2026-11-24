@@ -10,6 +10,7 @@ import { getState, setState } from "./sync-state";
 import { NAME_FIXES, toUkrainian } from "./ru-uk";
 import { slugify } from "./prom-feed";
 import { applyFullDescriptions, applyVendorCodes, descriptionsNeeded, scanYml, type YmlScan } from "./prom-articles";
+import { withLock } from "./task-lock";
 
 export type CatalogMode = "legacy" | "groups";
 
@@ -166,6 +167,13 @@ export async function applyGroups(run: Run, scan: YmlScan, mode: CatalogMode): P
 
 // ---------- 2. Усе разом: артикули + групи з YML ----------
 export async function syncYml(run: Run, feedUrl: string) {
+  // Один запуск за раз (cron, кнопки в адмінці): другий отримує зрозумілу помилку замість конфлікту записів
+  const l = await withLock(run, "yml", 15 * 60_000, () => syncYmlUnlocked(run, feedUrl));
+  if (!l.ran) throw new Error("Синхронізація YML уже виконується — зачекайте кілька хвилин");
+  return l.value;
+}
+
+async function syncYmlUnlocked(run: Run, feedUrl: string) {
   const res = await fetch(feedUrl, { cache: "no-store", headers: { "user-agent": "firma-shop-sync/1.0" } });
   if (!res.ok || !res.body) throw new Error(`YML не відкрився (код ${res.status})`);
   const need = await descriptionsNeeded(run);

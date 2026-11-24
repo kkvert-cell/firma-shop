@@ -38,7 +38,9 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
        FROM jsonb_to_recordset($1::jsonb) AS x(name text, slug text, path text, "parentPath" text)
        ON CONFLICT (path) DO UPDATE SET
          "name" = CASE WHEN 'name' = ANY("Category"."lockedFields") THEN "Category"."name" ELSE EXCLUDED."name" END,
-         "isActive" = CASE WHEN 'visibility' = ANY("Category"."lockedFields") THEN "Category"."isActive" ELSE true END`,
+         "isActive" = CASE WHEN 'visibility' = ANY("Category"."lockedFields") THEN "Category"."isActive" ELSE true END
+       WHERE (NOT ('name' = ANY("Category"."lockedFields")) AND "Category"."name" IS DISTINCT FROM EXCLUDED."name")
+          OR (NOT ('visibility' = ANY("Category"."lockedFields")) AND "Category"."isActive" IS DISTINCT FROM true)`,
       [j(rows)]
     );
   }
@@ -124,8 +126,23 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
        currency = EXCLUDED.currency,
        "isAvailable" = CASE WHEN "Product"."stockSyncedAt" IS NOT NULL THEN "Product"."isAvailable" ELSE EXCLUDED."isAvailable" END,
        "sourceUrl" = EXCLUDED."sourceUrl",
-       "syncedAt" = EXCLUDED."syncedAt", "updatedAt" = now()`,
+       "syncedAt" = EXCLUDED."syncedAt", "updatedAt" = now()
+     WHERE "Product".slug IS DISTINCT FROM EXCLUDED.slug
+        OR (NOT ('name' = ANY("Product"."lockedFields")) AND "Product".name IS DISTINCT FROM EXCLUDED.name)
+        OR (NOT ('description' = ANY("Product"."lockedFields")) AND "Product".description IS DISTINCT FROM EXCLUDED.description)
+        OR ("Product"."vendorCode" IS NULL AND EXCLUDED."vendorCode" IS NOT NULL)
+        OR (NOT ($3::boolean OR 'category' = ANY("Product"."lockedFields")) AND "Product"."categoryId" IS DISTINCT FROM EXCLUDED."categoryId")
+        OR (NOT ('brand' = ANY("Product"."lockedFields")) AND "Product"."brandId" IS DISTINCT FROM EXCLUDED."brandId")
+        OR (NOT ('price' = ANY("Product"."lockedFields")) AND ("Product".price IS DISTINCT FROM EXCLUDED.price OR "Product"."oldPrice" IS DISTINCT FROM EXCLUDED."oldPrice"))
+        OR "Product".currency IS DISTINCT FROM EXCLUDED.currency
+        OR ("Product"."stockSyncedAt" IS NULL AND "Product"."isAvailable" IS DISTINCT FROM EXCLUDED."isAvailable")
+        OR "Product"."sourceUrl" IS DISTINCT FROM EXCLUDED."sourceUrl"`,
     [j([...products.values()]), runTs, groupsMode]
+  );
+  // Товари, які не змінились: лише позначка «побачили у фіді» (потрібна, щоб знаходити зниклі товари), без зміни updatedAt
+  await sql(
+    `UPDATE "Product" SET "syncedAt" = $2::timestamp WHERE "externalId" = ANY($1::text[]) AND "syncedAt" IS DISTINCT FROM $2::timestamp`,
+    [[...products.keys()], runTs]
   );
 
   // 3а. Акції, які сайт уже завершив за строком: якщо Prom усе ще віддає ту саму знижку — лишаємо звичайну ціну.
@@ -143,22 +160,26 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
     [feedIds]
   );
 
-  // 4. Фото: заменяем целиком набор фото каждого товара
+  // 4. Фото: набор фото товара переписуємо лише там, де він справді змінився (порядок теж враховується)
   const ids = items.map((i) => i.externalId);
   const imageRows = items.flatMap((it) => it.images.map((url, ord) => ({ externalId: it.externalId, url, ord })));
   await sql(
-    `DELETE FROM "ProductImage" WHERE "productId" IN
-       (SELECT id FROM "Product" WHERE "externalId" = ANY($1::text[]) AND NOT ('images' = ANY("lockedFields")))`,
-    [ids]
+    `WITH fresh AS (
+       SELECT p.id AS pid, i.url, i.ord
+       FROM jsonb_to_recordset($2::jsonb) AS i("externalId" text, url text, ord int)
+       JOIN "Product" p ON p."externalId" = i."externalId"),
+     targets AS (
+       SELECT p.id FROM "Product" p
+       WHERE p."externalId" = ANY($1::text[]) AND NOT ('images' = ANY(p."lockedFields"))),
+     changed AS (
+       SELECT t.id FROM targets t
+       WHERE COALESCE((SELECT array_agg(pi.url ORDER BY pi."sortOrder", pi.id) FROM "ProductImage" pi WHERE pi."productId" = t.id), '{}'::text[])
+             IS DISTINCT FROM COALESCE((SELECT array_agg(f.url ORDER BY f.ord) FROM fresh f WHERE f.pid = t.id), '{}'::text[])),
+     del AS (DELETE FROM "ProductImage" WHERE "productId" IN (SELECT id FROM changed) RETURNING 1)
+     INSERT INTO "ProductImage"("productId", url, "sortOrder")
+     SELECT f.pid, f.url, f.ord FROM fresh f WHERE f.pid IN (SELECT id FROM changed)`,
+    [ids, j(imageRows)]
   );
-  if (imageRows.length) {
-    await sql(
-      `INSERT INTO "ProductImage"("productId","url","sortOrder")
-       SELECT p.id, i.url, i.ord FROM jsonb_to_recordset($1::jsonb) AS i("externalId" text, url text, ord int)
-       JOIN "Product" p ON p."externalId" = i."externalId" AND NOT ('images' = ANY(p."lockedFields"))`,
-      [j(imageRows)]
-    );
-  }
 
   // 5. Значения характеристик у товаров
   if (perProduct.length) {
@@ -168,7 +189,8 @@ export async function importItems(sql: SqlRunner, items: FeedItem[], runTs: stri
        JOIN "Product" p ON p."externalId" = d."externalId"
        JOIN "Attribute" a ON a.slug = d."attrSlug"
        JOIN "AttributeValue" av ON av."attributeId" = a.id AND av.value = d.value
-       ON CONFLICT ("productId","attributeId") DO UPDATE SET "valueId" = EXCLUDED."valueId"`,
+       ON CONFLICT ("productId","attributeId") DO UPDATE SET "valueId" = EXCLUDED."valueId"
+         WHERE "ProductAttributeValue"."valueId" IS DISTINCT FROM EXCLUDED."valueId"`,
       [j(perProduct)]
     );
   }

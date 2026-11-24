@@ -9,6 +9,9 @@ import { notifyOwner } from "./notify";
 import { parseItem, splitItems } from "./prom-feed";
 import { importItems, markMissing, type SqlRunner } from "./prom-sync";
 import { getState, setState } from "./sync-state";
+import { shouldStartPromCycle } from "./cron-plan";
+import { type FeedCache, sha256Hex, workersFeedCache } from "./feed-cache";
+import { withLock } from "./task-lock";
 
 const KEY = "prom_refresh";
 const PORTION = 200; // товарів за один запуск
@@ -22,6 +25,8 @@ export type PromRefreshState = {
   lastDone: string | null; // коли останнє коло завершилось
   fails: number; // невдалих запусків поспіль
   partial?: number; // кіл поспіль, у яких фід «зсунувся» і частину товарів пропущено
+  curHash?: string; // відбиток фіда, з яким працює поточне коло
+  feedHash?: string; // відбиток фіда, який був повністю імпортований останнім разом
 };
 
 const EMPTY: PromRefreshState = { active: false, runTs: null, cursor: 0, total: 0, lastDone: null, fails: 0 };
@@ -42,31 +47,66 @@ const save = (run: Run, st: PromRefreshState) => setState(run, KEY, JSON.stringi
 // Просить почати нове коло при найближчому запуску за розкладом
 export async function requestPromRefresh(run: Run): Promise<void> {
   const st = await loadPromState(run);
-  await save(run, { ...st, active: false, cursor: 0, lastDone: null, fails: 0 });
+  await save(run, { ...st, active: false, cursor: 0, lastDone: null, fails: 0, feedHash: undefined }); // feedHash скидаємо: імпорт піде повністю
 }
 
 export type RefreshResult =
   | { status: "idle" }
+  | { status: "busy" } // інше оновлення каталогу ще виконується
+  | { status: "unchanged"; total: number } // фід не змінився з минулого повного кола — нічого не записуємо
   | { status: "portion"; from: number; done: number; total: number; products: number }
   | { status: "finished"; total: number; hidden: number | null }
   | { status: "incomplete"; covered: number; total: number }
   | { status: "failed"; error: string; fails: number };
 
-export async function promRefreshStep(run: Run, feedUrl: string, now: Date = new Date(), refreshHours = 12): Promise<RefreshResult> {
-  let st = await loadPromState(run);
+export type StepOptions = { preload?: Record<string, string>; feedCache?: FeedCache | null };
+
+// Одне кроків оновлення. Коло стартує двічі на добу (див. cron-plan.ts), далі йде порціями, по одній у кожне вікно.
+// preload — стан, уже прочитаний за один запит (щоб не робити зайвих звернень до бази).
+export async function promRefreshStep(run: Run, feedUrl: string, now: Date = new Date(), opts: StepOptions = {}): Promise<RefreshResult> {
+  const raw = opts.preload ? opts.preload[KEY] : await getState(run, KEY);
+  let st: PromRefreshState;
+  try {
+    st = raw ? { ...EMPTY, ...JSON.parse(raw) } : { ...EMPTY };
+  } catch {
+    st = { ...EMPTY };
+  }
 
   if (!st.active) {
-    if (st.lastDone && now.getTime() - parseTs(st.lastDone) < refreshHours * 3600_000) return { status: "idle" };
+    const last = st.lastDone ? new Date(parseTs(st.lastDone)) : null;
+    if (!shouldStartPromCycle(last, now)) return { status: "idle" };
     st = { ...st, active: true, runTs: fmt(now), cursor: 0 };
   }
+
+  const l = await withLock(run, "prom", 15 * 60_000, () => runPortion(run, feedUrl, now, st, opts));
+  return l.ran ? l.value : { status: "busy" };
+}
+
+async function runPortion(run: Run, feedUrl: string, now: Date, st: PromRefreshState, opts: StepOptions): Promise<RefreshResult> {
   const runTs = st.runTs ?? fmt(now);
+  const cache = opts.feedCache === undefined ? workersFeedCache() : opts.feedCache;
 
   try {
-    const res = await fetch(feedUrl, { cache: "no-store", headers: { "user-agent": "firma-shop-sync/1.0" } });
-    if (!res.ok) throw new Error(`Фід Prom не відкрився (код ${res.status})`);
-    const items = splitItems(await res.text());
+    // Фід скачуємо один раз на коло: наступні порції беруть його з кешу (і не бачать «зсуву» фіда посеред кола)
+    const cacheKey = `prom-feed:${runTs}`;
+    let text = st.cursor > 0 && cache ? await cache.get(cacheKey) : null;
+    if (text === null) {
+      const res = await fetch(feedUrl, { cache: "no-store", headers: { "user-agent": "firma-shop-sync/1.0" } });
+      if (!res.ok) throw new Error(`Фід Prom не відкрився (код ${res.status})`);
+      text = await res.text();
+      if (cache) await cache.put(cacheKey, text, 6 * 3600);
+    }
+    const hash = await sha256Hex(text);
+    const items = splitItems(text);
     const total = items.length;
     if (total === 0) throw new Error("У фіді Prom немає товарів");
+
+    // Початок кола: якщо фід не відрізняється від повністю імпортованого минулого разу, нічого не пишемо в базу
+    if (st.cursor === 0 && st.feedHash && st.feedHash === hash) {
+      await save(run, { ...st, active: false, runTs: null, cursor: 0, total, lastDone: fmt(now), fails: 0, partial: 0, curHash: undefined });
+      return { status: "unchanged", total };
+    }
+    if (st.cursor === 0) st = { ...st, curHash: hash };
 
     const from = st.cursor;
     const slice = items.slice(from, from + PORTION).map(parseItem).filter((i) => i !== null);
@@ -89,11 +129,11 @@ export async function promRefreshStep(run: Run, feedUrl: string, now: Date = new
     const partial = st.partial ?? 0;
     if (covered < total * MIN_COVERAGE && partial < 2) {
       console.warn(`[prom] Коло неповне (оброблено ${covered} із ${total}), починаємо заново; «зниклі» товари не ховаємо`);
-      await save(run, { ...st, active: false, runTs: null, cursor: 0, total, lastDone: null, fails: 0, partial: partial + 1 });
+      await save(run, { ...st, active: false, runTs: null, cursor: 0, total, lastDone: null, fails: 0, partial: partial + 1, feedHash: undefined });
       return { status: "incomplete", covered, total };
     }
     const hidden = covered >= total * MIN_COVERAGE ? await markMissing(run as SqlRunner, runTs) : null;
-    await save(run, { active: false, runTs: null, cursor: 0, total, lastDone: fmt(now), fails: 0, partial: 0 });
+    await save(run, { active: false, runTs: null, cursor: 0, total, lastDone: fmt(now), fails: 0, partial: 0, feedHash: covered >= total * MIN_COVERAGE ? st.curHash : undefined });
     return { status: "finished", total, hidden };
   } catch (e) {
     const msg = (e instanceof Error ? e.message : String(e)).slice(0, 300);

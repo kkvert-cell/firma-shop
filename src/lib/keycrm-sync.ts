@@ -4,6 +4,7 @@
 
 import type { Run } from "./catalog";
 import { keycrmGet } from "./keycrm";
+import { withLock } from "./task-lock";
 
 type StockRow = { sku: string; quantity: number; reserve: number };
 
@@ -16,6 +17,7 @@ export type ChunkResult = {
   matched: number; // из них нашлось товаров на сайте
   changed: number; // у скольких товаров остаток реально изменился
   error: string | null;
+  busy?: boolean; // другий запуск не стартував: синхронізація вже виконується
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -43,7 +45,17 @@ export async function applyStocks(run: Run, rows: StockRow[], runTs: string) {
 }
 
 // Обрабатывает не больше maxPages страниц KeyCRM за раз (лимит запросов на один запуск воркера).
+// Один запуск за раз: cron і ручна синхронізація з адмінки не перетинаються (замок зі строком 10 хв)
 export async function syncStockChunk(
+  run: Run,
+  opts: { startPage: number; maxPages: number; runTs: string; pauseMs?: number }
+): Promise<ChunkResult> {
+  const l = await withLock(run, "stock", 10 * 60_000, () => syncStockChunkUnlocked(run, opts));
+  if (l.ran) return l.value;
+  return { fromPage: opts.startPage, pagesDone: 0, totalPages: opts.startPage, nextPage: opts.startPage, offersSeen: 0, matched: 0, changed: 0, error: null, busy: true };
+}
+
+async function syncStockChunkUnlocked(
   run: Run,
   opts: { startPage: number; maxPages: number; runTs: string; pauseMs?: number }
 ): Promise<ChunkResult> {

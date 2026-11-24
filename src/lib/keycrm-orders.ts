@@ -121,7 +121,23 @@ async function findExisting(sourceId: number, orderNumber: string): Promise<stri
 
 export type SendResult = { ok: true; keycrmId: string; already?: boolean } | { ok: false; error: string; attempts: number; waiting?: boolean };
 
-export async function sendOrderToKeycrm(run: Run, orderNumber: string): Promise<SendResult> {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Тимчасовий збій (мережа, тайм-аут, 429, 5xx) — варто повторити зараз; помилки даних (4xx) не повторюємо
+function isTransient(e: unknown): boolean {
+  if (e instanceof Error) {
+    if (e.name === "TimeoutError" || e.name === "AbortError" || e instanceof TypeError) return true;
+    return /відповів (408|429|5\d\d)\b/.test(e.message);
+  }
+  return false;
+}
+
+const FAST_TRIES = 3;
+const FAST_DELAYS_MS = [2000, 6000];
+
+// opts.fast — перша відправка одразу після оформлення: до 3 спроб за ~10 с при тимчасових збоях.
+// Для cron і кнопки в адмінці — одна спроба (далі їх підхоплює наступне вікно).
+export async function sendOrderToKeycrm(run: Run, orderNumber: string, opts: { fast?: boolean } = {}): Promise<SendResult> {
   const rows = (await run(
     `SELECT o.id, o."orderNumber", o."firstName", o."lastName", o.phone, o.email, o.comment,
             o."keycrmOrderId", o."keycrmAttempts", s.carrier::text AS carrier, s.city, s.warehouse, p.method::text AS method,
@@ -141,6 +157,18 @@ export async function sendOrderToKeycrm(run: Run, orderNumber: string): Promise<
     return { ok: false, error: "Очікує онлайн-оплати", attempts: Number(o.keycrmAttempts), waiting: true };
   }
 
+  // Захоплення замовлення: одночасно відправляє лише один виконавець (оформлення, cron, кнопка в адмінці),
+  // тож навіть при збігу в часі в KeyCRM не з'явиться двох однакових замовлень.
+  const claimed = await run(
+    `UPDATE "Order" SET "keycrmTriedAt" = now()
+      WHERE id = $1 AND "keycrmOrderId" IS NULL AND ("keycrmTriedAt" IS NULL OR "keycrmTriedAt" < now() - interval '90 seconds')
+      RETURNING id`,
+    [o.id]
+  );
+  if (!claimed.length) {
+    return { ok: false, error: "Замовлення щойно обробляється — повторіть через хвилину", attempts: Number(o.keycrmAttempts), waiting: true };
+  }
+
   const attempts = Number(o.keycrmAttempts) + 1;
   try {
     const items = (await run(
@@ -149,13 +177,24 @@ export async function sendOrderToKeycrm(run: Run, orderNumber: string): Promise<
     )) as unknown as ItemRow[];
     if (!items.length) throw new Error("У замовленні немає товарів");
 
-    const sourceId = await resolveSourceId();
-    let keycrmId = await findExisting(sourceId, o.orderNumber);
-    if (!keycrmId) {
-      const r = await keycrmPost("/order", buildKeycrmOrder(o, items, sourceId));
-      const id = (r.body as { id?: unknown } | null)?.id;
-      if (!r.ok || id == null) throw new Error(`KeyCRM відповів ${r.status}: ${short(r.body)}`);
-      keycrmId = String(id);
+    // Кожна спроба спочатку шукає замовлення в KeyCRM: якщо попередня відповідь загубилась, дубль не створиться
+    let keycrmId: string | null = null;
+    const tries = opts.fast ? FAST_TRIES : 1;
+    for (let t = 1; ; t++) {
+      try {
+        const sourceId = await resolveSourceId();
+        keycrmId = await findExisting(sourceId, o.orderNumber);
+        if (!keycrmId) {
+          const r = await keycrmPost("/order", buildKeycrmOrder(o, items, sourceId));
+          const id = (r.body as { id?: unknown } | null)?.id;
+          if (!r.ok || id == null) throw new Error(`KeyCRM відповів ${r.status}: ${short(r.body)}`);
+          keycrmId = String(id);
+        }
+        break;
+      } catch (e) {
+        if (t >= tries || !isTransient(e)) throw e;
+        await sleep(FAST_DELAYS_MS[Math.min(t - 1, FAST_DELAYS_MS.length - 1)]);
+      }
     }
     await run(
       `UPDATE "Order" SET "keycrmOrderId" = $2, "keycrmSyncedAt" = now(), "keycrmError" = NULL,

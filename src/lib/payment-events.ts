@@ -15,7 +15,7 @@ export async function handlePaymentEvent(ev: PaymentEvent): Promise<string> {
         if (ev.status === "PAID") {
           await sendOrderEmail(run, ev.orderNumber);
           await notifyOwner(`💳 Замовлення ${ev.orderNumber} оплачено карткою: ${r.total} ₴.`);
-          if (process.env.KEYCRM_API_KEY) await sendOrderToKeycrm(run, ev.orderNumber);
+          if (process.env.KEYCRM_API_KEY) await sendOrderToKeycrm(run, ev.orderNumber, { fast: true });
         } else if (ev.status === "REFUNDED") {
           await notifyOwner(`↩️ Повернення коштів за замовлення ${ev.orderNumber}. Перевірте його в KeyCRM.`);
         }

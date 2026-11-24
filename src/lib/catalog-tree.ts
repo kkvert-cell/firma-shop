@@ -16,7 +16,7 @@ export type TreeNode = {
   children: TreeNode[];
 };
 
-const TTL_MS = 2 * 60_000;
+const TTL_MS = 5 * 60_000;
 let cache: { at: number; tree: TreeNode[] } | null = null;
 
 export function invalidateCatalogTree() {

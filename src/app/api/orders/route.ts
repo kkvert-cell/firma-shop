@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
           if (v2.payment !== "ONLINE_CARD") {
             await sendOrderEmail(getRunner(), number);
             await notifyOwner(`🛒 Нове замовлення ${number} на ${formatPrice(r.total ?? 0)} ₴: ${v2.lastName} ${v2.firstName}, ${v2.phone}.`);
-            if (process.env.KEYCRM_API_KEY) await sendOrderToKeycrm(getRunner(), number);
+            if (process.env.KEYCRM_API_KEY) await sendOrderToKeycrm(getRunner(), number, { fast: true });
           }
         } catch (e) {
           console.error("order after:", e);

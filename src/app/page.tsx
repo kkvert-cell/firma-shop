@@ -37,7 +37,7 @@ async function loadCollections() {
 }
 
 export default async function HomePage() {
-  const [{ categories, error }, collections] = await Promise.all([loadCategories(), loadCollections()]);
+  const [{ categories }, collections] = await Promise.all([loadCategories(), loadCollections()]);
   const bf = isBlackFriday();
   const nonEmpty = collections ? COLLECTION_KINDS.filter((k: CollectionKind) => collections[k].length > 0) : [];
   return (
@@ -87,7 +87,6 @@ export default async function HomePage() {
         {categories.length === 0 && (
           <p style={{ color: "var(--color-ink-muted)" }}>
             Категорії тимчасово недоступні.
-            {error && <span style={{ display: "block", color: "var(--color-error)", fontSize: "var(--text-sm)" }}>(тимчасово для налагодження: {error})</span>}
           </p>
         )}
         <GroupCards groups={categories} showSubs={false} />

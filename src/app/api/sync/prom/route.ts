@@ -31,8 +31,7 @@ export async function GET(req: NextRequest) {
   }
   if (key !== secret) {
     return page(
-      `<h3>Доступ заборонено</h3>
-       <p style="color:#888;font-size:13px">(діагностика: довжина збереженого секрету — ${secret.length}, довжина введеного — ${key.length})</p>`,
+      "<h3>Доступ заборонено</h3>",
       403
     );
   }
