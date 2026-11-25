@@ -14,5 +14,11 @@
       "0,30 * * * *",
       "1,31 * * * *"
     ]
-  }
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      "id": "0a1dbb6f596a4b62ada5a307f3d3589c"
+    }
+  ]
 }
