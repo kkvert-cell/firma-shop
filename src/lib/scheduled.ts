@@ -18,7 +18,12 @@ import { withLock } from "./task-lock";
 
 export { CRON_PROM, CRON_STOCK };
 
+// Синхронизации товаров (каталог Prom, YML, остатки KeyCRM, обслуживание акций) выполняются только при SYNC_ENABLED=on.
+// Без этой настройки cron ничего не меняет в товарах и ценах; добор заказов в KeyCRM работает всегда.
+const syncEnabled = () => process.env.SYNC_ENABLED === "on";
+
 export async function runPromRefresh(now: Date = new Date()) {
+  if (!syncEnabled()) return;
   const feedUrl = process.env.PROM_FEED_URL;
   const ymlUrl = process.env.PROM_YML_URL;
   if (!feedUrl && !ymlUrl) return;
@@ -84,6 +89,11 @@ export async function runScheduled(now: Date = new Date()) {
     } catch (err) {
       console.error("[cron] Помилка передачі замовлень у KeyCRM:", err);
     }
+  }
+
+  if (!syncEnabled()) {
+    console.log("[cron] Синхронізацію товарів вимкнено (SYNC_ENABLED не дорівнює on): залишки, акції й каталог не змінюються");
+    return;
   }
 
   // 1) Остатки из KeyCRM (замок внутри syncStockChunk)
